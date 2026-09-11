@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<title>Ridgeline — Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; color: #f0f0f0; }
+
+.topbar { background: #111; border-bottom: 1px solid #222; padding: 0 16px;
+          height: 52px; display: flex; align-items: center; gap: 10px; position: sticky; top:0; z-index:100; }
+.topbar img { height: 28px; object-fit: contain; }
+.topbar-title { font-size: 15px; font-weight: 900; color: #3d8b3d; flex: 1; }
+.btn-back { font-size: 12px; color: #888; text-decoration: none; }
+
+.page { max-width: 680px; margin: 0 auto; padding: 20px 16px 60px; }
+.section-title { font-size: 12px; font-weight: 700; color: #3d8b3d; text-transform: uppercase;
+                 letter-spacing: .5px; margin-bottom: 12px; margin-top: 24px; }
+.section-title:first-child { margin-top: 0; }
+
+/* KPI grid */
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 0; }
+.kpi { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 16px 14px; }
+.kpi-val { font-size: 28px; font-weight: 900; color: #3d8b3d; line-height: 1; }
+.kpi-lbl { font-size: 12px; color: #666; margin-top: 4px; }
+
+/* Month summary */
+.month-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; padding: 20px; }
+.month-row  { display: flex; justify-content: space-between; padding: 8px 0;
+              border-bottom: 1px solid #222; font-size: 14px; }
+.month-row:last-child { border-bottom: none; font-weight: 700; font-size: 16px; }
+.month-row .green { color: #5dbf5d; }
+.month-row .red   { color: #ff6b6b; }
+
+/* Recent quotes table */
+.quote-row { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+             border-bottom: 1px solid #222; }
+.quote-row:last-child { border-bottom: none; }
+.qr-name  { flex: 1; font-size: 14px; }
+.qr-date  { font-size: 12px; color: #666; }
+.qr-total { font-size: 14px; font-weight: 700; color: #3d8b3d; }
+.qr-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; }
+.s-pending  { background: #2e2000; color: #ffab40; }
+.s-accepted { background: #1f2e1f; color: #5dbf5d; }
+.s-done     { background: #1a1a2e; color: #7c9fff; }
+.card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; padding: 16px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="/static/logo.png" alt="" onerror="this.style.display='none'">
+  <div class="topbar-title">Dashboard</div>
+  <a href="/home" class="btn-back">← Home</a>
+</div>
+
+<div class="page">
+  <div class="section-title">This Month</div>
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi"><div class="kpi-val" id="kpiRev">—</div><div class="kpi-lbl">Revenue</div></div>
+    <div class="kpi"><div class="kpi-val" id="kpiQuotes">—</div><div class="kpi-lbl">Quotes</div></div>
+    <div class="kpi"><div class="kpi-val" id="kpiExp">—</div><div class="kpi-lbl">Expenses</div></div>
+    <div class="kpi"><div class="kpi-val" id="kpiProfit">—</div><div class="kpi-lbl">Net Profit</div></div>
+  </div>
+
+  <div class="section-title">Month Summary</div>
+  <div class="month-card" id="monthSummary">
+    <div class="month-row"><span>Revenue</span><span class="green" id="mRev">—</span></div>
+    <div class="month-row"><span>Expenses</span><span class="red" id="mExp">—</span></div>
+    <div class="month-row"><span>Net Profit</span><span id="mProfit">—</span></div>
+  </div>
+
+  <div class="section-title">Pipeline</div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-val" id="kpiPending">—</div><div class="kpi-lbl">Pending Quotes</div></div>
+    <div class="kpi"><div class="kpi-val" id="kpiAccepted">—</div><div class="kpi-lbl">Accepted</div></div>
+  </div>
+
+  <div class="section-title">Recent Quotes</div>
+  <div class="card" id="recentList"><p style="color:#666;font-size:13px">Loading…</p></div>
+</div>
+
+<script>
+async function load() {
+  const [stats, quotes] = await Promise.all([
+    fetch('/api/stats').then(r=>r.json()),
+    fetch('/api/quotes').then(r=>r.json()),
+  ]);
+
+  const rev    = stats.month_revenue   || 0;
+  const exp    = stats.month_expenses  || 0;
+  const profit = rev - exp;
+
+  const fmt = v => '$' + Math.abs(v).toLocaleString('en-AU', {maximumFractionDigits:0});
+
+  document.getElementById('kpiRev').textContent    = fmt(rev);
+  document.getElementById('kpiQuotes').textContent = stats.month_quotes ?? 0;
+  document.getElementById('kpiExp').textContent    = fmt(exp);
+  document.getElementById('kpiProfit').textContent = (profit < 0 ? '−' : '') + fmt(profit);
+
+  document.getElementById('mRev').textContent    = fmt(rev);
+  document.getElementById('mExp').textContent    = '−' + fmt(exp);
+  const mProfit = document.getElementById('mProfit');
+  mProfit.textContent = (profit < 0 ? '−' : '+') + fmt(profit);
+  mProfit.style.color = profit >= 0 ? '#5dbf5d' : '#ff6b6b';
+
+  document.getElementById('kpiPending').textContent  = stats.pending_quotes  ?? 0;
+  document.getElementById('kpiAccepted').textContent = stats.accepted_quotes ?? 0;
+
+  // Recent
+  const recent = quotes.slice(0, 8);
+  document.getElementById('recentList').innerHTML = recent.length
+    ? recent.map(q => {
+        const sCls = q.status === 'accepted' ? 's-accepted' : q.status === 'done' ? 's-done' : 's-pending';
+        const sTxt = (q.status||'pending').charAt(0).toUpperCase() + (q.status||'pending').slice(1);
+        const date = q.created_at ? new Date(q.created_at).toLocaleDateString('en-AU',{day:'2-digit',month:'short'}) : '';
+        return `<div class="quote-row">
+          <div class="qr-name">${q.customer_name||'—'}<br><span style="font-size:11px;color:#666">${q.quote_number}</span></div>
+          <div class="qr-date">${date}</div>
+          <div class="qr-total">$${(q.total||0).toFixed(0)}</div>
+          <div class="qr-badge ${sCls}">${sTxt}</div>
+        </div>`;
+      }).join('')
+    : '<p style="color:#666;font-size:13px;text-align:center;padding:20px">No quotes yet</p>';
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<title>Ridgeline Rubbish Removal</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100vh;
+       display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 16px;
+             padding: 40px 32px; width: 100%; max-width: 380px; text-align: center; }
+.logo { height: 64px; object-fit: contain; margin-bottom: 20px; }
+.logo-text { font-size: 22px; font-weight: 900; color: #3d8b3d; margin-bottom: 4px; }
+.logo-sub  { font-size: 13px; color: #666; margin-bottom: 32px; }
+.field { margin-bottom: 14px; text-align: left; }
+.field label { display: block; font-size: 12px; color: #888; margin-bottom: 6px; }
+.field input { width: 100%; background: #111; border: 1px solid #333; border-radius: 8px;
+               padding: 12px 14px; color: #f0f0f0; font-size: 15px; outline: none; }
+.field input:focus { border-color: #3d8b3d; }
+.btn-login { width: 100%; padding: 14px; background: #3d8b3d; color: #fff; border: none;
+             border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px; }
+.btn-login:hover { background: #2d6b2d; }
+.error { background: #2a1a1a; border: 1px solid #8b3d3d; color: #ff6b6b;
+         border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <img src="/static/logo.png" class="logo" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="logo-text">Ridgeline</div>
+  <div class="logo-sub">Rubbish Removal</div>
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+  <form method="POST">
+    <div class="field">
+      <label>Username</label>
+      <input type="text" name="username" autocomplete="username" autofocus>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" name="password" autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn-login">Sign In</button>
+  </form>
+</div>
+</body>
+</html>

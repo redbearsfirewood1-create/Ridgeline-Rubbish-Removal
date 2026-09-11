@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ridgeline — Home</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; color: #f0f0f0; }
+
+.topbar { background: #111; border-bottom: 1px solid #222; padding: 0 18px;
+          height: 56px; display: flex; align-items: center; gap: 12px; position: sticky; top:0; z-index:100; }
+.topbar img { height: 30px; object-fit: contain; }
+.topbar-name { font-size: 16px; font-weight: 900; color: #3d8b3d; flex: 1; }
+.btn-logout { font-size: 12px; color: #666; text-decoration: none; }
+.btn-logout:hover { color: #aaa; }
+
+.hero { text-align: center; padding: 40px 20px 24px; }
+.hero-title { font-size: 24px; font-weight: 900; color: #f0f0f0; }
+.hero-sub   { font-size: 13px; color: #666; margin-top: 4px; }
+
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+         max-width: 480px; margin: 0 auto; padding: 0 16px 40px; }
+.tile { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 16px;
+        padding: 28px 16px; text-align: center; text-decoration: none; color: inherit;
+        transition: border-color .2s, background .2s; display: block; }
+.tile:hover { border-color: #3d8b3d; background: #1f2e1f; }
+.tile-icon  { font-size: 36px; margin-bottom: 10px; }
+.tile-label { font-size: 15px; font-weight: 700; color: #f0f0f0; margin-bottom: 4px; }
+.tile-sub   { font-size: 12px; color: #666; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+         max-width: 480px; margin: 0 auto 24px; padding: 0 16px; }
+.stat { background: #111; border: 1px solid #222; border-radius: 12px; padding: 14px 10px; text-align: center; }
+.stat-val { font-size: 22px; font-weight: 900; color: #3d8b3d; }
+.stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="topbar-name">Ridgeline Rubbish Removal</div>
+  <a href="/logout" class="btn-logout">Log Out</a>
+</div>
+
+<div class="hero">
+  <div class="hero-title">Good day 👋</div>
+  <div class="hero-sub">What do you want to work on?</div>
+</div>
+
+<div class="stats" id="statsRow">
+  <div class="stat"><div class="stat-val" id="sQuotes">—</div><div class="stat-lbl">Total Quotes</div></div>
+  <div class="stat"><div class="stat-val" id="sPending">—</div><div class="stat-lbl">Pending</div></div>
+  <div class="stat"><div class="stat-val" id="sRevenue">—</div><div class="stat-lbl">This Month</div></div>
+</div>
+
+<div class="tiles">
+  <a href="/quote" class="tile">
+    <div class="tile-icon">📋</div>
+    <div class="tile-label">Quote</div>
+    <div class="tile-sub">New removal quote</div>
+  </a>
+  <a href="/quotes" class="tile">
+    <div class="tile-icon">📁</div>
+    <div class="tile-label">Jobs</div>
+    <div class="tile-sub">All quotes & jobs</div>
+  </a>
+  <a href="/dashboard" class="tile">
+    <div class="tile-icon">📊</div>
+    <div class="tile-label">Dashboard</div>
+    <div class="tile-sub">Revenue & KPIs</div>
+  </a>
+  <a href="/expenses" class="tile">
+    <div class="tile-icon">💸</div>
+    <div class="tile-label">Expenses</div>
+    <div class="tile-sub">Track costs</div>
+  </a>
+</div>
+
+<script>
+fetch('/api/stats').then(r=>r.json()).then(s => {
+  document.getElementById('sQuotes').textContent  = s.total_quotes ?? '0';
+  document.getElementById('sPending').textContent = s.pending_quotes ?? '0';
+  document.getElementById('sRevenue').textContent = '$' + ((s.month_revenue||0)/1).toLocaleString('en-AU',{maximumFractionDigits:0});
+});
+</script>
+</body>
+</html>
