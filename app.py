@@ -92,6 +92,11 @@ def login():
         error = 'Invalid username or password'
     return render_template('login.html', error=error)
 
+@app.route('/apple-touch-icon.png')
+@app.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    return send_from_directory('static', 'logo.png', mimetype='image/png')
+
 @app.route('/logout')
 def logout():
     session.clear()
