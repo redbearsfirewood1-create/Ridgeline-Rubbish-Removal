@@ -17,3 +17,9 @@ services:
         sync: false
       - key: GOOGLE_MAPS_KEY
         sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: BUSINESS_PHONE
+        sync: false

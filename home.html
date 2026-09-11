@@ -21,8 +21,9 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 .hero-title { font-size: 24px; font-weight: 900; color: #f0f0f0; }
 .hero-sub   { font-size: 13px; color: #666; margin-top: 4px; }
 
-.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-         max-width: 480px; margin: 0 auto; padding: 0 16px 40px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+         max-width: 600px; margin: 0 auto; padding: 0 16px 40px; }
+@media (max-width: 480px) { .tiles { grid-template-columns: 1fr 1fr; } }
 .tile { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 16px;
         padding: 28px 16px; text-align: center; text-decoration: none; color: inherit;
         transition: border-color .2s, background .2s; display: block; }
@@ -66,6 +67,16 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
     <div class="tile-icon">📁</div>
     <div class="tile-label">Jobs</div>
     <div class="tile-sub">All quotes & jobs</div>
+  </a>
+  <a href="/schedule" class="tile">
+    <div class="tile-icon">📅</div>
+    <div class="tile-label">Schedule</div>
+    <div class="tile-sub">Calendar & trucks</div>
+  </a>
+  <a href="/route" class="tile">
+    <div class="tile-icon">🗺️</div>
+    <div class="tile-label">Route</div>
+    <div class="tile-sub">Day route planner</div>
   </a>
   <a href="/dashboard" class="tile">
     <div class="tile-icon">📊</div>
