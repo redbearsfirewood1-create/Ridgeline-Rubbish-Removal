@@ -137,7 +137,7 @@ async function sendSMS(id) {
   ].filter(Boolean).join('\n');
 
   const body = encodeURIComponent(
-    `Hi ${q.customer_name||'there'}, here is your Ridgeline Rubbish Removal quote:\n\n` +
+    `Hi ${q.customer_name||'there'}, here is your Ridgeline Services quote:\n\n` +
     (q.address ? `Pickup: ${q.address}\n\n` : '') +
     `${itemLines}\n\nTOTAL: $${(q.total||0).toFixed(2)}\n\nTo confirm, reply YES or call us.`
   );

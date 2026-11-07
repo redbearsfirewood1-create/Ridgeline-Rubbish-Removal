@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ridgeline">
+<title>Ridgeline — Cleaning Checklist</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;}
+
+.topbar{background:#111;border-bottom:1px solid #222;padding:0 18px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.topbar img{height:30px;object-fit:contain;}
+.topbar-name{font-size:16px;font-weight:900;color:#3d8b3d;flex:1;}
+.btn-top{font-size:12px;color:#666;text-decoration:none;cursor:pointer;border:none;background:none;padding:4px 8px;}
+.btn-top:hover{color:#aaa;}
+
+.phase{display:none;padding:20px 16px 80px;}
+.phase.active{display:block;}
+
+/* ── Login ── */
+.login-wrap{max-width:380px;margin:0 auto;}
+.login-title{font-size:22px;font-weight:900;text-align:center;margin-bottom:6px;}
+.login-sub{font-size:13px;color:#666;text-align:center;margin-bottom:28px;}
+.emp-select{width:100%;background:#1a1a1a;border:1px solid #333;color:#f0f0f0;font-size:16px;padding:14px 16px;border-radius:12px;appearance:none;margin-bottom:16px;outline:none;}
+.emp-select:focus{border-color:#3d8b3d;}
+.pin-label{font-size:13px;color:#888;margin-bottom:10px;text-align:center;}
+.pin-display{display:flex;justify-content:center;gap:14px;margin-bottom:20px;}
+.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid #444;background:transparent;transition:background .15s;}
+.pin-dot.filled{background:#3d8b3d;border-color:#3d8b3d;}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto 20px;}
+.pin-btn{background:#1a1a1a;border:1px solid #2a2a2a;color:#f0f0f0;font-size:22px;font-weight:700;padding:18px 0;border-radius:14px;cursor:pointer;transition:background .15s;user-select:none;-webkit-tap-highlight-color:transparent;}
+.pin-btn:active{background:#3d8b3d;}
+.pin-btn.del{font-size:18px;color:#888;}
+.pin-btn.del:active{background:#333;}
+.btn-primary{width:100%;background:#3d8b3d;color:#fff;border:none;padding:16px;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;}
+.btn-primary:disabled{background:#2a2a2a;color:#555;cursor:not-allowed;}
+.login-err{color:#ff6b6b;font-size:13px;text-align:center;min-height:18px;margin-top:8px;}
+
+/* ── Sites ── */
+.sites-wrap{max-width:480px;margin:0 auto;}
+.emp-badge{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px;}
+.emp-avatar{width:40px;height:40px;border-radius:50%;background:#3d8b3d;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fff;flex-shrink:0;}
+.emp-info strong{font-size:15px;display:block;}
+.emp-info span{font-size:12px;color:#666;}
+
+/* Week row */
+.week-title{font-size:14px;font-weight:700;color:#888;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;}
+.week-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:24px;scrollbar-width:none;}
+.week-row::-webkit-scrollbar{display:none;}
+.week-day{flex-shrink:0;width:52px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:10px 4px;text-align:center;}
+.week-day.today{border-color:#3d8b3d;background:#1f2e1f;}
+.week-day-label{font-size:11px;color:#666;font-weight:700;text-transform:uppercase;margin-bottom:6px;}
+.week-day.today .week-day-label{color:#3d8b3d;}
+.week-site-dot{width:28px;height:28px;border-radius:8px;background:#2a2a2a;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.week-site-dot.active{background:#1f2e1f;border:1px solid #3d8b3d;}
+.week-day.off{opacity:.4;}
+
+/* Today bubbles */
+.today-title{font-size:18px;font-weight:900;margin-bottom:6px;}
+.today-sub{font-size:13px;color:#666;margin-bottom:16px;}
+.site-bubbles{display:flex;flex-direction:column;gap:12px;}
+.site-bubble{background:#1a1a1a;border:2px solid #2a2a2a;border-radius:18px;padding:20px 20px;display:flex;align-items:center;gap:16px;cursor:pointer;transition:border-color .2s,background .2s;-webkit-tap-highlight-color:transparent;}
+.site-bubble:active,.site-bubble:hover{border-color:#3d8b3d;background:#1f2e1f;}
+.site-bubble-icon{font-size:36px;flex-shrink:0;}
+.site-bubble-name{font-size:18px;font-weight:700;color:#f0f0f0;}
+.site-bubble-sub{font-size:13px;color:#666;margin-top:3px;}
+.site-bubble-arrow{margin-left:auto;color:#3d8b3d;font-size:22px;flex-shrink:0;}
+.no-sites{text-align:center;padding:40px 20px;color:#444;}
+.no-sites-icon{font-size:40px;margin-bottom:12px;}
+
+/* ── Arrival ── */
+.arrival-wrap{max-width:420px;margin:0 auto;}
+.arrival-title{font-size:20px;font-weight:900;margin-bottom:6px;}
+.arrival-sub{font-size:13px;color:#666;margin-bottom:24px;}
+.arrival-site{background:#1f2e1f;border:1px solid #3d8b3d;border-radius:14px;padding:14px 18px;margin-bottom:24px;display:flex;align-items:center;gap:12px;}
+.arrival-site-icon{font-size:28px;}
+.arrival-site-name{font-size:16px;font-weight:700;color:#3d8b3d;}
+
+.photo-capture{background:#1a1a1a;border:2px dashed #333;border-radius:16px;padding:0;overflow:hidden;margin-bottom:16px;position:relative;min-height:220px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.photo-capture.has-photo{border-style:solid;border-color:#3d8b3d;}
+.photo-preview{width:100%;height:220px;object-fit:cover;display:none;}
+.photo-placeholder{text-align:center;padding:32px 20px;}
+.photo-placeholder-icon{font-size:48px;margin-bottom:10px;}
+.photo-placeholder-text{font-size:14px;color:#666;}
+.photo-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+
+.location-status{font-size:12px;padding:10px 14px;border-radius:10px;margin-bottom:16px;background:#1a1a1a;border:1px solid #2a2a2a;color:#888;}
+.location-status.got{border-color:#3d8b3d;color:#4caf50;}
+.location-status.err{border-color:#b71c1c;color:#ef5350;}
+
+/* ── Checklist ── */
+.checklist-wrap{max-width:560px;margin:0 auto;}
+.cl-header{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:16px;margin-bottom:16px;}
+.cl-site-name{font-size:17px;font-weight:900;color:#3d8b3d;}
+.cl-meta{font-size:12px;color:#666;margin-top:3px;}
+.progress-bar-wrap{margin:12px 0 4px;}
+.progress-track{background:#2a2a2a;border-radius:99px;height:8px;overflow:hidden;}
+.progress-fill{background:#3d8b3d;height:8px;border-radius:99px;transition:width .3s;}
+.progress-label{font-size:12px;color:#888;margin-top:5px;}
+
+.cl-section{margin-bottom:12px;}
+.cl-section-header{background:#3d8b3d;padding:10px 14px;border-radius:12px 12px 0 0;font-size:13px;font-weight:700;color:#fff;letter-spacing:.5px;}
+.cl-section-header.weekly{background:#1565c0;}
+.cl-tasks{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:0 0 12px 12px;border-top:none;}
+.cl-task{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #242424;gap:12px;}
+.cl-task:last-child{border-bottom:none;}
+.cl-task-label{font-size:14px;color:#e0e0e0;flex:1;line-height:1.3;}
+.cl-task.done .cl-task-label{color:#666;text-decoration:line-through;}
+
+/* Toggle */
+.toggle{position:relative;display:inline-block;width:52px;height:30px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-track{position:absolute;inset:0;background:#333;border-radius:30px;cursor:pointer;transition:background .25s;}
+.toggle input:checked ~ .toggle-track{background:#3d8b3d;}
+.toggle-track::before{content:'';position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .25s;}
+.toggle input:checked ~ .toggle-track::before{transform:translateX(22px);}
+.toggle input:checked ~ .toggle-track.weekly-track{background:#1565c0;}
+
+/* Proof photos */
+.proof-section{margin-bottom:12px;}
+.proof-header{background:#7b1fa2;padding:10px 14px;border-radius:12px 12px 0 0;font-size:13px;font-weight:700;color:#fff;letter-spacing:.5px;}
+.proof-tasks{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:0 0 12px 12px;border-top:none;padding:12px;}
+.proof-row{margin-bottom:14px;}
+.proof-label{font-size:13px;font-weight:700;color:#ce93d8;margin-bottom:8px;}
+.proof-capture{background:#111;border:2px dashed #333;border-radius:12px;overflow:hidden;position:relative;min-height:130px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.proof-capture.has-photo{border-style:solid;border-color:#7b1fa2;}
+.proof-preview{width:100%;height:130px;object-fit:cover;display:none;}
+.proof-placeholder{text-align:center;padding:20px;}
+.proof-placeholder-icon{font-size:32px;margin-bottom:6px;}
+.proof-placeholder-text{font-size:12px;color:#666;}
+.proof-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.proof-uploaded{position:absolute;top:6px;right:6px;background:#7b1fa2;border-radius:99px;padding:3px 8px;font-size:10px;font-weight:700;color:#fff;display:none;}
+.proof-capture.has-photo .proof-uploaded{display:block;}
+
+/* Manager sign-off */
+.signoff-section{margin-bottom:12px;}
+.signoff-header{background:#1a237e;padding:10px 14px;border-radius:12px 12px 0 0;font-size:13px;font-weight:700;color:#fff;letter-spacing:.5px;}
+.signoff-body{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:0 0 12px 12px;border-top:none;padding:14px;}
+.signoff-label{font-size:12px;color:#888;margin-bottom:6px;font-weight:700;}
+.signoff-input{width:100%;background:#111;border:1px solid #333;color:#f0f0f0;font-size:15px;padding:12px 14px;border-radius:10px;outline:none;margin-bottom:14px;}
+.signoff-input:focus{border-color:#3d8b6b;}
+.sig-canvas-wrap{position:relative;border:2px solid #333;border-radius:12px;overflow:hidden;background:#fff;touch-action:none;margin-bottom:8px;}
+.sig-canvas-wrap.signed{border-color:#3d8b6b;}
+#sigCanvas{display:block;width:100%;height:150px;cursor:crosshair;}
+.sig-actions{display:flex;gap:8px;align-items:center;}
+.btn-clear-sig{background:#111;border:1px solid #444;color:#888;padding:9px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;}
+.btn-clear-sig:active{background:#222;}
+.sig-hint{font-size:11px;color:#555;flex:1;}
+.sig-required{font-size:11px;color:#ff6b6b;min-height:14px;}
+
+.notes-wrap{margin-bottom:16px;}
+.notes-label{font-size:13px;color:#888;margin-bottom:6px;}
+.notes-textarea{width:100%;background:#1a1a1a;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:12px;border-radius:12px;resize:vertical;min-height:70px;outline:none;}
+.notes-textarea:focus{border-color:#3d8b3d;}
+
+.submit-wrap{position:fixed;bottom:0;left:0;right:0;padding:12px 16px;background:#0d0d0d;border-top:1px solid #222;}
+.btn-submit{width:100%;max-width:560px;margin:0 auto;display:block;background:#3d8b3d;color:#fff;border:none;padding:16px;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;}
+.btn-submit:disabled{background:#2a2a2a;color:#555;}
+.btn-submit:active{background:#2d6b2d;}
+
+/* ── Done ── */
+.done-wrap{max-width:400px;margin:40px auto;text-align:center;padding:20px;}
+.done-icon{font-size:72px;margin-bottom:20px;}
+.done-title{font-size:24px;font-weight:900;color:#3d8b3d;margin-bottom:8px;}
+.done-sub{font-size:14px;color:#666;margin-bottom:30px;}
+.done-stats{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:20px;margin-bottom:24px;}
+.stat-big{font-size:48px;font-weight:900;color:#3d8b3d;}
+.stat-label{font-size:14px;color:#888;}
+.btn-done{width:100%;border-radius:14px;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;text-align:center;text-decoration:none;display:block;}
+.btn-done.green{background:#3d8b3d;color:#fff;border:none;}
+.btn-done.outline{background:#1a1a1a;border:1px solid #3d8b3d;color:#3d8b3d;}
+.btn-done.grey{background:#1a1a1a;border:1px solid #444;color:#888;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="topbar-name" id="topbarName">Ridgeline Cleaning</div>
+  <button class="btn-top" id="btnTopAction" onclick="topAction()">Log In</button>
+</div>
+
+<!-- Phase 1: Login -->
+<div class="phase active" id="phaseLogin">
+  <div class="login-wrap">
+    <div class="login-title">🧹 Cleaner Sign In</div>
+    <div class="login-sub">Select your name and enter your PIN</div>
+    <select class="emp-select" id="empSelect"><option value="">Loading…</option></select>
+    <div class="pin-label">Enter PIN</div>
+    <div class="pin-display">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-btn" onclick="pinPress('1')">1</button>
+      <button class="pin-btn" onclick="pinPress('2')">2</button>
+      <button class="pin-btn" onclick="pinPress('3')">3</button>
+      <button class="pin-btn" onclick="pinPress('4')">4</button>
+      <button class="pin-btn" onclick="pinPress('5')">5</button>
+      <button class="pin-btn" onclick="pinPress('6')">6</button>
+      <button class="pin-btn" onclick="pinPress('7')">7</button>
+      <button class="pin-btn" onclick="pinPress('8')">8</button>
+      <button class="pin-btn" onclick="pinPress('9')">9</button>
+      <button class="pin-btn del" onclick="pinClear()">CLR</button>
+      <button class="pin-btn" onclick="pinPress('0')">0</button>
+      <button class="pin-btn del" onclick="pinBack()">⌫</button>
+    </div>
+    <button class="btn-primary" id="btnLogin" onclick="doLogin()" disabled>Sign In</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- Phase 2: My Sites -->
+<div class="phase" id="phaseSites">
+  <div class="sites-wrap">
+    <div class="emp-badge">
+      <div class="emp-avatar" id="empAvatar">?</div>
+      <div class="emp-info">
+        <strong id="empName">—</strong>
+        <span id="empDateLine">Today's schedule</span>
+      </div>
+    </div>
+
+    <div class="week-title">This Week</div>
+    <div class="week-row" id="weekRow"></div>
+
+    <div class="today-title">Today's Sites</div>
+    <div class="today-sub" id="todaySub">Select a site to begin your checklist</div>
+    <div class="site-bubbles" id="siteBubbles">
+      <div class="no-sites"><div class="no-sites-icon">📋</div>Loading sites…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 3: Arrival Photo -->
+<div class="phase" id="phaseArrival">
+  <div class="arrival-wrap">
+    <div class="arrival-title">📸 Arrival Check-In</div>
+    <div class="arrival-sub">Take a photo to confirm your arrival time and location</div>
+    <div class="arrival-site">
+      <div class="arrival-site-icon">🍔</div>
+      <div class="arrival-site-name" id="arrivalSiteName">—</div>
+    </div>
+
+    <div class="photo-capture" id="arrivalPhotoCapture" onclick="triggerArrivalPhoto()">
+      <img id="arrivalPreview" class="photo-preview" alt="">
+      <div class="photo-placeholder" id="arrivalPlaceholder">
+        <div class="photo-placeholder-icon">📷</div>
+        <div class="photo-placeholder-text">Tap to take arrival photo</div>
+      </div>
+      <input type="file" accept="image/*" capture="environment"
+             class="photo-input" id="arrivalPhotoInput" onchange="arrivalPhotoSelected(this)">
+    </div>
+
+    <div class="location-status" id="locationStatus">📍 Getting your location…</div>
+
+    <button class="btn-primary" id="btnConfirmArrival" onclick="confirmArrival()" disabled>
+      Confirm Arrival & Start Checklist
+    </button>
+  </div>
+</div>
+
+<!-- Phase 4: Checklist -->
+<div class="phase" id="phaseChecklist">
+  <div class="checklist-wrap">
+    <div class="cl-header">
+      <div class="cl-site-name" id="clSiteName">—</div>
+      <div class="cl-meta" id="clMeta">—</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-label" id="progressLabel">0 / 0 tasks</div>
+      </div>
+    </div>
+    <div id="clItems"></div>
+    <div id="proofSection"></div>
+
+    <!-- Manager Sign-Off -->
+    <div class="signoff-section">
+      <div class="signoff-header">🖊 Manager Sign-Off</div>
+      <div class="signoff-body">
+        <div class="signoff-label">Manager Name</div>
+        <input class="signoff-input" id="managerName" type="text"
+               placeholder="e.g. John Smith (Duty Manager)"
+               oninput="checkSignoffReady()">
+
+        <div class="signoff-label">Signature</div>
+        <div class="sig-canvas-wrap" id="sigWrap">
+          <canvas id="sigCanvas" height="150"></canvas>
+        </div>
+        <div class="sig-actions">
+          <button class="btn-clear-sig" onclick="clearSig()">Clear Signature</button>
+          <div class="sig-hint">Draw with finger or mouse</div>
+        </div>
+        <div class="sig-required" id="sigRequired"></div>
+      </div>
+    </div>
+
+    <div class="notes-wrap">
+      <div class="notes-label">Notes (optional)</div>
+      <textarea class="notes-textarea" id="clNotes" placeholder="Any issues, comments, or observations…"></textarea>
+    </div>
+  </div>
+  <div class="submit-wrap">
+    <button class="btn-submit" id="btnSubmit" onclick="submitChecklist()">Submit Checklist ✓</button>
+  </div>
+</div>
+
+<!-- Phase 5: Done -->
+<div class="phase" id="phaseDone">
+  <div class="done-wrap">
+    <div class="done-icon">✅</div>
+    <div class="done-title">Checklist Submitted!</div>
+    <div class="done-sub" id="doneSub">Great work today.</div>
+    <div class="done-stats">
+      <div class="stat-big" id="donePct">—</div>
+      <div class="stat-label">tasks completed</div>
+    </div>
+    <a class="btn-done green" id="btnPdf" href="#" target="_blank">📄 Download PDF</a>
+    <button class="btn-done outline" onclick="goToSites()">Start Another Site</button>
+    <button class="btn-done grey" onclick="doSignOut()">Sign Out</button>
+  </div>
+</div>
+
+<script>
+const TODAY = '{{ today }}';
+const TODAY_DAY = '{{ day }}';
+const DAY_NAMES = ['mon','tue','wed','thu','fri','sat','sun'];
+const DAY_LABELS = {mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+const DAY_FULL = {mon:'Monday',tue:'Tuesday',wed:'Wednesday',thu:'Thursday',fri:'Friday',sat:'Saturday',sun:'Sunday'};
+
+let pin = '';
+let currentEmployee = null;
+let currentSite = null;
+let currentTemplate = null;
+let currentArrivalId = null;
+let submittedClId = null;
+let gpsData = {lat:'', lng:'', accuracy:''};
+let taskState = {};
+let weeklyState = {};
+let proofUploaded = {};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  loadEmployees();
+  // Check existing employee session
+  try {
+    const r = await fetch('/api/checklist/session');
+    const d = await r.json();
+    if (d.employee_name) {
+      currentEmployee = {name: d.employee_name, id: d.employee_id};
+      setEmployeeBadge(d.employee_name);
+      showPhase('phaseSites');
+      loadSites();
+    }
+  } catch(e) {}
+});
+
+async function loadEmployees() {
+  try {
+    const r = await fetch('/api/employees');
+    const emps = await r.json();
+    const sel = document.getElementById('empSelect');
+    if (!emps.length) { sel.innerHTML='<option value="">No employees — ask admin to add you</option>'; return; }
+    sel.innerHTML = '<option value="">— Select your name —</option>' +
+      emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  } catch(e) {}
+}
+
+// ── PIN ────────────────────────────────────────────────────────────────────
+function pinPress(d) {
+  if (pin.length >= 4) return;
+  pin += d;
+  updatePinDots();
+  if (pin.length === 4 && document.getElementById('empSelect').value) {
+    document.getElementById('btnLogin').disabled = false;
+  }
+}
+function pinBack() { pin = pin.slice(0,-1); updatePinDots(); document.getElementById('btnLogin').disabled=true; }
+function pinClear() { pin=''; updatePinDots(); document.getElementById('btnLogin').disabled=true; document.getElementById('loginErr').textContent=''; }
+function updatePinDots() {
+  for (let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('filled', i<pin.length);
+}
+document.getElementById('empSelect').addEventListener('change', e => {
+  document.getElementById('btnLogin').disabled = !(e.target.value && pin.length===4);
+});
+
+// ── Login ──────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const empId = document.getElementById('empSelect').value;
+  if (!empId || pin.length!==4) return;
+  document.getElementById('loginErr').textContent = '';
+  document.getElementById('btnLogin').disabled = true;
+  try {
+    const r = await fetch('/checklist/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id: empId, pin})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      currentEmployee = {name: d.name, id: empId};
+      setEmployeeBadge(d.name);
+      showPhase('phaseSites');
+      loadSites();
+    } else {
+      document.getElementById('loginErr').textContent = d.error || 'Wrong PIN — try again';
+      pinClear();
+    }
+  } catch(e) { document.getElementById('loginErr').textContent='Connection error'; }
+  finally { document.getElementById('btnLogin').disabled = false; }
+}
+
+function setEmployeeBadge(name) {
+  document.getElementById('empAvatar').textContent = name[0].toUpperCase();
+  document.getElementById('empName').textContent = name;
+  document.getElementById('topbarName').textContent = name;
+  document.getElementById('btnTopAction').textContent = 'Sign Out';
+  const now = new Date();
+  document.getElementById('empDateLine').textContent =
+    now.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
+}
+
+// ── Sites / Week view ──────────────────────────────────────────────────────
+async function loadSites() {
+  try {
+    const [weekR, todayR] = await Promise.all([
+      fetch('/api/sites/week'), fetch('/api/sites/today')
+    ]);
+    const weekData  = await weekR.json();
+    const todaySites = await todayR.json();
+    renderWeekRow(weekData);
+    renderTodaySites(todaySites);
+  } catch(e) {
+    document.getElementById('siteBubbles').innerHTML =
+      '<div class="no-sites"><div class="no-sites-icon">⚠️</div>Error loading sites</div>';
+  }
+}
+
+function renderWeekRow(weekData) {
+  const row = document.getElementById('weekRow');
+  row.innerHTML = DAY_NAMES.map(day => {
+    const sites = weekData[day] || [];
+    const isToday = day === TODAY_DAY;
+    const dots = sites.length > 0
+      ? sites.map(s=>`<div class="week-site-dot active" title="${s.name}">🍔</div>`).join('')
+      : `<div class="week-site-dot" style="color:#333;font-size:10px;">—</div>`;
+    return `<div class="week-day ${isToday?'today':''}${!sites.length?' off':''}">
+      <div class="week-day-label">${DAY_LABELS[day]}</div>
+      ${dots}
+    </div>`;
+  }).join('');
+}
+
+function renderTodaySites(sites) {
+  const wrap = document.getElementById('siteBubbles');
+  document.getElementById('todaySub').textContent =
+    `${DAY_FULL[TODAY_DAY]} — tap a site to begin`;
+  if (!sites.length) {
+    wrap.innerHTML='<div class="no-sites"><div class="no-sites-icon">🎉</div>No sites scheduled for today!</div>';
+    return;
+  }
+  wrap.innerHTML = sites.map(s => `
+    <div class="site-bubble" onclick="startSite('${s.id}')">
+      <div class="site-bubble-icon">🍔</div>
+      <div>
+        <div class="site-bubble-name">${s.name}</div>
+        <div class="site-bubble-sub">${s.has_kitchen ? '🍳 Includes kitchen' : 'Standard restaurant'}</div>
+      </div>
+      <div class="site-bubble-arrow">›</div>
+    </div>`).join('');
+}
+
+// ── Arrival ────────────────────────────────────────────────────────────────
+function startSite(siteId) {
+  currentSite = siteId;
+  document.getElementById('arrivalSiteName').textContent =
+    document.querySelector(`.site-bubble[onclick="startSite('${siteId}')"] .site-bubble-name`)?.textContent || siteId;
+  showPhase('phaseArrival');
+  getLocation();
+}
+
+let arrivalPhotoFile = null;
+function triggerArrivalPhoto() { document.getElementById('arrivalPhotoInput').click(); }
+
+function arrivalPhotoSelected(input) {
+  if (!input.files[0]) return;
+  arrivalPhotoFile = input.files[0];
+  const url = URL.createObjectURL(arrivalPhotoFile);
+  const preview = document.getElementById('arrivalPreview');
+  preview.src = url; preview.style.display = 'block';
+  document.getElementById('arrivalPlaceholder').style.display = 'none';
+  document.getElementById('arrivalPhotoCapture').classList.add('has-photo');
+  checkArrivalReady();
+}
+
+function getLocation() {
+  const status = document.getElementById('locationStatus');
+  if (!navigator.geolocation) {
+    status.textContent = '📍 Location not available on this device';
+    status.className = 'location-status err';
+    gpsData = {lat:'', lng:'', accuracy:''};
+    checkArrivalReady();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      gpsData = {
+        lat: pos.coords.latitude.toFixed(6),
+        lng: pos.coords.longitude.toFixed(6),
+        accuracy: Math.round(pos.coords.accuracy)
+      };
+      status.textContent = `📍 Location captured (±${gpsData.accuracy}m)`;
+      status.className = 'location-status got';
+      checkArrivalReady();
+    },
+    err => {
+      status.textContent = '📍 Location unavailable — continuing without GPS';
+      status.className = 'location-status err';
+      gpsData = {lat:'', lng:'', accuracy:''};
+      checkArrivalReady();
+    },
+    {timeout:10000, enableHighAccuracy:true}
+  );
+}
+
+function checkArrivalReady() {
+  // Can confirm once photo taken (location is optional)
+  document.getElementById('btnConfirmArrival').disabled = !arrivalPhotoFile;
+}
+
+async function confirmArrival() {
+  document.getElementById('btnConfirmArrival').disabled = true;
+  document.getElementById('btnConfirmArrival').textContent = 'Saving…';
+  try {
+    const fd = new FormData();
+    fd.append('site_id', currentSite);
+    fd.append('lat', gpsData.lat);
+    fd.append('lng', gpsData.lng);
+    fd.append('accuracy', gpsData.accuracy);
+    if (arrivalPhotoFile) fd.append('photo', arrivalPhotoFile, arrivalPhotoFile.name || 'arrival.jpg');
+
+    const r = await fetch('/api/arrivals', {method:'POST', body:fd});
+    const d = await r.json();
+    if (r.ok) {
+      currentArrivalId = d.id;
+      await loadChecklist();
+    } else {
+      alert('Error saving arrival: ' + (d.error||'unknown'));
+    }
+  } catch(e) { alert('Connection error saving arrival'); }
+  finally {
+    document.getElementById('btnConfirmArrival').disabled = false;
+    document.getElementById('btnConfirmArrival').textContent = 'Confirm Arrival & Start Checklist';
+  }
+}
+
+// ── Checklist ──────────────────────────────────────────────────────────────
+async function loadChecklist() {
+  const d = new Date(TODAY + 'T12:00:00');
+  const dayAbbr = DAY_NAMES[d.getDay()===0 ? 6 : d.getDay()-1];
+  try {
+    const r = await fetch(`/api/checklist/template/${currentSite}?day=${dayAbbr}`);
+    currentTemplate = await r.json();
+    taskState = {}; weeklyState = {}; proofUploaded = {};
+    document.getElementById('clSiteName').textContent = currentTemplate.site_name;
+    document.getElementById('clMeta').textContent =
+      `${DAY_FULL[dayAbbr]} ${TODAY}  ·  ${currentEmployee?.name||''}`;
+    buildChecklistUI(currentTemplate);
+    buildProofSection(currentTemplate.proof_photos || []);
+    updateProgress();
+    showPhase('phaseChecklist');
+  } catch(e) { alert('Error loading checklist'); }
+}
+
+function buildChecklistUI(tpl) {
+  taskState = {}; weeklyState = {};
+  const container = document.getElementById('clItems');
+  container.innerHTML = '';
+  tpl.daily_sections.forEach(s => container.appendChild(buildSection(s.name, s.tasks, false)));
+  if (tpl.weekly_today?.length) {
+    const dayLabel = DAY_FULL[tpl.day] || tpl.day;
+    container.appendChild(buildSection(`Weekly Tasks — ${dayLabel}`, tpl.weekly_today, true));
+  }
+}
+
+function buildSection(name, tasks, isWeekly) {
+  const wrap = document.createElement('div'); wrap.className='cl-section';
+  const hdr = document.createElement('div');
+  hdr.className='cl-section-header'+(isWeekly?' weekly':'');
+  hdr.textContent = name;
+  wrap.appendChild(hdr);
+  const list = document.createElement('div'); list.className='cl-tasks';
+  tasks.forEach(task => {
+    if (isWeekly) weeklyState[task]=false;
+    else { if (!taskState[name]) taskState[name]={}; taskState[name][task]=false; }
+    const row = document.createElement('div'); row.className='cl-task';
+    const lbl = document.createElement('div'); lbl.className='cl-task-label'; lbl.textContent=task;
+    const tog = document.createElement('label'); tog.className='toggle';
+    const inp = document.createElement('input'); inp.type='checkbox';
+    inp.addEventListener('change', () => {
+      if (isWeekly) weeklyState[task]=inp.checked;
+      else taskState[name][task]=inp.checked;
+      row.classList.toggle('done', inp.checked);
+      updateProgress();
+    });
+    const track = document.createElement('div');
+    track.className='toggle-track'+(isWeekly?' weekly-track':'');
+    tog.appendChild(inp); tog.appendChild(track);
+    row.appendChild(lbl); row.appendChild(tog);
+    list.appendChild(row);
+  });
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function updateProgress() {
+  let total=0, done=0;
+  Object.values(taskState).forEach(s=>Object.values(s).forEach(v=>{total++;if(v)done++;}));
+  Object.values(weeklyState).forEach(v=>{total++;if(v)done++;});
+  const pct = total>0 ? done/total*100 : 0;
+  document.getElementById('progressFill').style.width = pct+'%';
+  document.getElementById('progressLabel').textContent = `${done} / ${total} tasks complete`;
+}
+
+// ── Proof photos ───────────────────────────────────────────────────────────
+let proofFiles = {};
+
+function buildProofSection(proofPhotos) {
+  proofFiles = {}; proofUploaded = {};
+  const sec = document.getElementById('proofSection');
+  if (!proofPhotos.length) { sec.innerHTML=''; return; }
+
+  const wrap = document.createElement('div'); wrap.className='proof-section';
+  const hdr = document.createElement('div'); hdr.className='proof-header';
+  hdr.textContent = '📷 Required Site Photos';
+  wrap.appendChild(hdr);
+
+  const inner = document.createElement('div'); inner.className='proof-tasks';
+  proofPhotos.forEach(p => {
+    const row = document.createElement('div'); row.className='proof-row';
+    row.innerHTML = `
+      <div class="proof-label">${p.label}</div>
+      <div class="proof-capture" id="pc-${p.key}">
+        <img id="pp-${p.key}" class="proof-preview" alt="">
+        <div class="proof-placeholder" id="ph-${p.key}">
+          <div class="proof-placeholder-icon">📷</div>
+          <div class="proof-placeholder-text">Tap to capture</div>
+        </div>
+        <input type="file" accept="image/*" capture="environment" class="proof-input"
+               onchange="proofPhotoSelected('${p.key}', this)">
+        <div class="proof-uploaded">✓ Captured</div>
+      </div>`;
+    inner.appendChild(row);
+  });
+  wrap.appendChild(inner);
+  sec.innerHTML='';
+  sec.appendChild(wrap);
+}
+
+function proofPhotoSelected(key, input) {
+  if (!input.files[0]) return;
+  proofFiles[key] = input.files[0];
+  const img = document.getElementById('pp-'+key);
+  img.src = URL.createObjectURL(proofFiles[key]);
+  img.style.display = 'block';
+  document.getElementById('ph-'+key).style.display = 'none';
+  document.getElementById('pc-'+key).classList.add('has-photo');
+}
+
+async function uploadProofPhotos(clId) {
+  const tpl = currentTemplate;
+  if (!tpl?.proof_photos?.length) return;
+  for (const p of tpl.proof_photos) {
+    if (!proofFiles[p.key]) continue;
+    const fd = new FormData();
+    fd.append('photo', proofFiles[p.key], proofFiles[p.key].name || p.key+'.jpg');
+    try {
+      await fetch(`/api/checklist/${clId}/proof/${p.key}`, {method:'POST', body:fd});
+    } catch(e) {}
+  }
+}
+
+// ── Submit ─────────────────────────────────────────────────────────────────
+async function submitChecklist() {
+  if (!currentTemplate) return;
+
+  // Validate manager sign-off
+  const managerName = document.getElementById('managerName').value.trim();
+  if (!managerName) {
+    document.getElementById('sigRequired').textContent = 'Manager name required before submitting';
+    document.getElementById('managerName').focus();
+    document.getElementById('managerName').scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
+  if (!sigHasContent) {
+    document.getElementById('sigRequired').textContent = 'Signature required before submitting';
+    document.getElementById('sigCanvas').scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
+
+  document.getElementById('btnSubmit').disabled = true;
+  document.getElementById('btnSubmit').textContent = 'Submitting…';
+
+  const d = new Date(TODAY+'T12:00:00');
+  const dayAbbr = DAY_NAMES[d.getDay()===0?6:d.getDay()-1];
+
+  try {
+    const r = await fetch('/api/checklist', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        site_id:            currentSite,
+        site_name:          currentTemplate.site_name,
+        date:               TODAY,
+        day:                dayAbbr,
+        daily_items:        taskState,
+        weekly_items:       weeklyState,
+        notes:              document.getElementById('clNotes').value,
+        arrival_id:         currentArrivalId || '',
+        manager_name:       managerName,
+        manager_signature:  getSigDataURL(),
+      })
+    });
+    const d2 = await r.json();
+    if (r.ok) {
+      submittedClId = d2.id;
+      // Upload proof photos in background
+      await uploadProofPhotos(d2.id);
+      const pct = d2.total>0 ? Math.round(d2.done/d2.total*100) : 0;
+      document.getElementById('donePct').textContent = pct+'%';
+      document.getElementById('doneSub').textContent =
+        `${d2.done} of ${d2.total} tasks completed at ${currentTemplate.site_name}`;
+      document.getElementById('btnPdf').href = `/api/checklist/${d2.id}/pdf`;
+      showPhase('phaseDone');
+    } else {
+      alert('Error: '+(d2.error||'unknown'));
+    }
+  } catch(e) { alert('Connection error. Try again.'); }
+  finally {
+    document.getElementById('btnSubmit').disabled = false;
+    document.getElementById('btnSubmit').textContent = 'Submit Checklist ✓';
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function topAction() { if (currentEmployee) doSignOut(); }
+
+function doSignOut() {
+  fetch('/checklist/logout');
+  currentEmployee = null; currentSite = null; currentTemplate = null;
+  currentArrivalId = null; arrivalPhotoFile = null;
+  pin = ''; updatePinDots();
+  document.getElementById('btnLogin').disabled = true;
+  document.getElementById('loginErr').textContent = '';
+  document.getElementById('empSelect').value = '';
+  document.getElementById('btnTopAction').textContent = 'Log In';
+  document.getElementById('topbarName').textContent = 'Ridgeline Cleaning';
+  // Reset arrival
+  document.getElementById('arrivalPreview').style.display='none';
+  document.getElementById('arrivalPlaceholder').style.display='block';
+  document.getElementById('arrivalPhotoCapture').classList.remove('has-photo');
+  document.getElementById('locationStatus').textContent='📍 Getting your location…';
+  document.getElementById('locationStatus').className='location-status';
+  showPhase('phaseLogin');
+}
+
+function goToSites() {
+  currentSite = null; currentTemplate = null; currentArrivalId = null;
+  arrivalPhotoFile = null;
+  document.getElementById('clNotes').value = '';
+  document.getElementById('arrivalPreview').style.display='none';
+  document.getElementById('arrivalPlaceholder').style.display='block';
+  document.getElementById('arrivalPhotoCapture').classList.remove('has-photo');
+  document.getElementById('btnConfirmArrival').disabled = true;
+  document.getElementById('locationStatus').textContent='📍 Getting your location…';
+  document.getElementById('locationStatus').className='location-status';
+  clearSig();
+  document.getElementById('managerName').value = '';
+  showPhase('phaseSites');
+}
+
+// ── Signature canvas ───────────────────────────────────────────────────────
+let sigDrawing = false;
+let sigHasContent = false;
+
+function initSigCanvas() {
+  const canvas = document.getElementById('sigCanvas');
+  const wrap   = document.getElementById('sigWrap');
+  // Size canvas to container width
+  canvas.width  = wrap.clientWidth || 340;
+  canvas.height = 150;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#111111';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if (e.touches) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top)  * scaleY,
+      };
+    }
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
+    };
+  }
+
+  canvas.addEventListener('mousedown',  e => { sigDrawing=true; ctx.beginPath(); const p=getPos(e); ctx.moveTo(p.x,p.y); e.preventDefault(); });
+  canvas.addEventListener('mousemove',  e => { if(!sigDrawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); sigHasContent=true; wrap.classList.add('signed'); checkSignoffReady(); });
+  canvas.addEventListener('mouseup',    () => { sigDrawing=false; });
+  canvas.addEventListener('mouseleave', () => { sigDrawing=false; });
+  canvas.addEventListener('touchstart', e => { sigDrawing=true; ctx.beginPath(); const p=getPos(e); ctx.moveTo(p.x,p.y); e.preventDefault(); }, {passive:false});
+  canvas.addEventListener('touchmove',  e => { if(!sigDrawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); sigHasContent=true; wrap.classList.add('signed'); checkSignoffReady(); e.preventDefault(); }, {passive:false});
+  canvas.addEventListener('touchend',   () => { sigDrawing=false; });
+}
+
+function clearSig() {
+  const canvas = document.getElementById('sigCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  sigHasContent = false;
+  document.getElementById('sigWrap').classList.remove('signed');
+  checkSignoffReady();
+}
+
+function getSigDataURL() {
+  return sigHasContent ? document.getElementById('sigCanvas').toDataURL('image/png') : '';
+}
+
+function checkSignoffReady() {
+  const name = document.getElementById('managerName')?.value?.trim();
+  const req  = document.getElementById('sigRequired');
+  if (!name && !sigHasContent) {
+    req.textContent = 'Manager name and signature required before submitting';
+  } else if (!name) {
+    req.textContent = 'Manager name required';
+  } else if (!sigHasContent) {
+    req.textContent = 'Signature required';
+  } else {
+    req.textContent = '';
+  }
+}
+
+// Init canvas after phase is shown
+const _origShowPhase = showPhase;
+function showPhase(id) {
+  _origShowPhase(id);
+  if (id === 'phaseChecklist') {
+    setTimeout(initSigCanvas, 50);
+  }
+}
+</script>
+</body>
+</html>

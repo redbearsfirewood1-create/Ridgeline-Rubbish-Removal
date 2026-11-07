@@ -297,9 +297,9 @@ function sendSMS() {
 
   const pm = selectedPayment ? `\nPayment: ${selectedPayment}` : '';
   const body = encodeURIComponent(
-    `Hi ${CUSTOMER}, here is your Ridgeline Rubbish Removal invoice (${QUOTE_NUM}):\n\n` +
+    `Hi ${CUSTOMER}, here is your Ridgeline Services invoice (${QUOTE_NUM}):\n\n` +
     `${lines.join('\n')}\n\nTOTAL: $${TOTAL.toFixed(2)}${pm}\n\n` +
-    `Thank you for choosing Ridgeline Rubbish Removal!`
+    `Thank you for choosing Ridgeline Services!`
   );
 
   const num = mobile.startsWith('0') ? '+61' + mobile.slice(1) : mobile;

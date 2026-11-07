@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<title>Ridgeline — Client Accounts</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;}
+.topbar{background:#111;border-bottom:1px solid #222;padding:0 18px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.topbar img{height:30px;object-fit:contain;}
+.topbar-name{font-size:16px;font-weight:900;color:#3d8b3d;flex:1;}
+.btn-back{font-size:12px;color:#666;text-decoration:none;}
+.btn-back:hover{color:#aaa;}
+.wrap{max-width:700px;margin:0 auto;padding:20px 16px 60px;}
+.page-title{font-size:22px;font-weight:900;margin-bottom:4px;}
+.page-sub{font-size:13px;color:#666;margin-bottom:24px;}
+
+/* Add form */
+.add-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:20px;margin-bottom:24px;}
+.add-title{font-size:14px;font-weight:700;color:#3d8b3d;margin-bottom:16px;text-transform:uppercase;letter-spacing:.5px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+@media(max-width:480px){.form-row{grid-template-columns:1fr;}}
+.field-label{font-size:11px;color:#888;margin-bottom:4px;font-weight:600;}
+.field{background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;}
+.field:focus{border-color:#3d8b3d;}
+.sites-label{font-size:11px;color:#888;margin-bottom:8px;font-weight:600;}
+.sites-checks{display:flex;gap:16px;flex-wrap:wrap;}
+.site-check{display:flex;align-items:center;gap:6px;font-size:13px;color:#ccc;cursor:pointer;}
+.site-check input{accent-color:#3d8b3d;width:16px;height:16px;}
+.btn-add{background:#3d8b3d;border:none;color:#fff;font-size:14px;font-weight:700;padding:11px 24px;border-radius:10px;cursor:pointer;margin-top:4px;}
+.btn-add:hover{background:#2d6b2d;}
+
+/* Client cards */
+.client-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;}
+.client-avatar{width:40px;height:40px;border-radius:50%;background:#1f3a1f;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.client-info{flex:1;}
+.client-name{font-size:15px;font-weight:700;}
+.client-user{font-size:12px;color:#888;margin-top:2px;}
+.client-sites-tag{font-size:11px;color:#3d8b3d;background:#1f2e1f;border:1px solid #2e4e2e;padding:2px 8px;border-radius:99px;display:inline-block;margin-top:4px;}
+.badge-inactive{background:#2a1a1a;color:#888;border:1px solid #3a2a2a;padding:2px 8px;border-radius:99px;font-size:11px;display:inline-block;margin-left:6px;}
+.client-actions{display:flex;gap:8px;}
+.btn-edit{background:#111;border:1px solid #333;color:#ccc;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-edit:hover{border-color:#3d8b3d;color:#3d8b3d;}
+.btn-del{background:#111;border:1px solid #333;color:#666;padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer;}
+.btn-del:hover{border-color:#b71c1c;color:#ef5350;}
+
+/* Edit modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;overflow-y:auto;}
+.modal-bg.open{display:flex;align-items:flex-start;justify-content:center;padding:20px 12px 40px;}
+.modal{background:#111;border:1px solid #2a2a2a;border-radius:20px;width:100%;max-width:500px;padding:24px;}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+.modal-title{font-size:16px;font-weight:900;color:#3d8b3d;}
+.modal-close{background:none;border:none;color:#666;font-size:22px;cursor:pointer;}
+.modal-close:hover{color:#aaa;}
+.btn-save{background:#3d8b3d;border:none;color:#fff;font-size:14px;font-weight:700;padding:11px 24px;border-radius:10px;cursor:pointer;width:100%;margin-top:8px;}
+.btn-save:hover{background:#2d6b2d;}
+.info-box{background:#1a2540;border:1px solid #2a3a60;border-radius:10px;padding:12px 14px;font-size:12px;color:#90caf9;margin-bottom:20px;}
+.empty{text-align:center;padding:40px 20px;color:#444;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="topbar-name">Client Accounts</div>
+  <a href="/home" class="btn-back">← Home</a>
+</div>
+
+<div class="wrap">
+  <div class="page-title">🏢 Client Accounts</div>
+  <div class="page-sub">Manage client portal access — clients see checklists but not employee names</div>
+
+  <div class="info-box">
+    ℹ️ Clients can log in at <strong>/client/login</strong>. They see the dashboard and calendar with completed checklists and can download PDFs with photos. Employee names are hidden.
+  </div>
+
+  <!-- Add client form -->
+  <div class="add-card">
+    <div class="add-title">➕ Add Client Account</div>
+    <div class="form-row">
+      <div>
+        <div class="field-label">Client / Company Name</div>
+        <input class="field" id="newName" placeholder="e.g. McDonald's AU" type="text">
+      </div>
+      <div>
+        <div class="field-label">Username</div>
+        <input class="field" id="newUser" placeholder="e.g. mcdonalds" type="text" autocapitalize="none">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <div class="field-label">Password</div>
+        <input class="field" id="newPass" placeholder="Set a password" type="text">
+      </div>
+      <div></div>
+    </div>
+    <div class="sites-label">Site Access (empty = all sites)</div>
+    <div class="sites-checks" id="newSitesChecks"></div>
+    <br>
+    <button class="btn-add" onclick="addClient()">Add Client</button>
+  </div>
+
+  <!-- Client list -->
+  <div id="clientList"><div class="empty">Loading…</div></div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-bg" id="editModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title">Edit Client</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="field-label">Company Name</div>
+    <input class="field" id="editName" style="margin-bottom:12px;">
+    <div class="field-label">Username</div>
+    <input class="field" id="editUser" style="margin-bottom:12px;" autocapitalize="none">
+    <div class="field-label">Password (leave blank to keep existing)</div>
+    <input class="field" id="editPass" style="margin-bottom:16px;" type="text" placeholder="Leave blank to keep current">
+    <div class="sites-label">Site Access (empty = all sites)</div>
+    <div class="sites-checks" id="editSitesChecks" style="margin-bottom:16px;"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <label style="font-size:13px;color:#ccc;display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="editActive" style="accent-color:#3d8b3d;width:16px;height:16px;"> Active
+      </label>
+    </div>
+    <button class="btn-save" onclick="saveEdit()">Save Changes</button>
+  </div>
+</div>
+
+<script>
+let allClients = [];
+let editingId  = null;
+let allSites   = [];
+
+async function init() {
+  // Load sites for checkboxes
+  try {
+    const r = await fetch('/api/sites');
+    allSites = await r.json();
+  } catch { allSites = []; }
+
+  buildSiteChecks('newSitesChecks', []);
+  await loadClients();
+}
+
+function buildSiteChecks(containerId, selected) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = allSites.map(s => `
+    <label class="site-check">
+      <input type="checkbox" value="${s.id}" ${selected.includes(s.id) ? 'checked' : ''}>
+      ${s.name}${s.has_kitchen ? ' 🍳' : ''}
+    </label>`).join('');
+}
+
+function getCheckedSites(containerId) {
+  return [...document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)].map(i => i.value);
+}
+
+async function loadClients() {
+  const r = await fetch('/api/clients');
+  allClients = await r.json();
+  renderClients();
+}
+
+function renderClients() {
+  const wrap = document.getElementById('clientList');
+  if (!allClients.length) {
+    wrap.innerHTML = '<div class="empty">No client accounts yet. Add one above.</div>';
+    return;
+  }
+  wrap.innerHTML = allClients.map(c => {
+    const siteLabel = c.sites && c.sites.length
+      ? c.sites.map(sid => { const s = allSites.find(x=>x.id===sid); return s ? s.name : sid; }).join(', ')
+      : 'All sites';
+    const inactiveBadge = !c.active ? '<span class="badge-inactive">Inactive</span>' : '';
+    return `<div class="client-card">
+      <div class="client-avatar">🏢</div>
+      <div class="client-info">
+        <div class="client-name">${c.name}${inactiveBadge}</div>
+        <div class="client-user">@${c.username}</div>
+        <div class="client-sites-tag">${siteLabel}</div>
+      </div>
+      <div class="client-actions">
+        <button class="btn-edit" onclick="openEdit('${c.id}')">Edit</button>
+        <button class="btn-del" onclick="deleteClient('${c.id}','${c.name}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addClient() {
+  const name = document.getElementById('newName').value.trim();
+  const user = document.getElementById('newUser').value.trim().toLowerCase();
+  const pass = document.getElementById('newPass').value.trim();
+  if (!name || !user || !pass) { alert('Please fill in name, username and password.'); return; }
+  const sites = getCheckedSites('newSitesChecks');
+  const r = await fetch('/api/clients', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, username: user, password: pass, sites})
+  });
+  if (r.ok) {
+    document.getElementById('newName').value = '';
+    document.getElementById('newUser').value = '';
+    document.getElementById('newPass').value = '';
+    buildSiteChecks('newSitesChecks', []);
+    await loadClients();
+  } else {
+    alert('Error creating client.');
+  }
+}
+
+function openEdit(id) {
+  const c = allClients.find(x => x.id === id);
+  if (!c) return;
+  editingId = id;
+  document.getElementById('editName').value   = c.name;
+  document.getElementById('editUser').value   = c.username;
+  document.getElementById('editPass').value   = '';
+  document.getElementById('editActive').checked = c.active !== false;
+  buildSiteChecks('editSitesChecks', c.sites || []);
+  document.getElementById('editModal').classList.add('open');
+}
+
+async function saveEdit() {
+  if (!editingId) return;
+  const c = allClients.find(x => x.id === editingId);
+  const payload = {
+    name:     document.getElementById('editName').value.trim(),
+    username: document.getElementById('editUser').value.trim().toLowerCase(),
+    sites:    getCheckedSites('editSitesChecks'),
+    active:   document.getElementById('editActive').checked,
+  };
+  const pass = document.getElementById('editPass').value.trim();
+  if (pass) payload.password = pass;
+  const r = await fetch(`/api/clients/${editingId}`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (r.ok) {
+    closeModal();
+    await loadClients();
+  } else {
+    alert('Error saving changes.');
+  }
+}
+
+async function deleteClient(id, name) {
+  if (!confirm(`Delete client account "${name}"? This cannot be undone.`)) return;
+  await fetch(`/api/clients/${id}`, {method:'DELETE'});
+  await loadClients();
+}
+
+function closeModal(e) {
+  if (!e || e.target.id === 'editModal') {
+    document.getElementById('editModal').classList.remove('open');
+    editingId = null;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<title>Ridgeline — Client Portal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#f0f0f0;padding:20px;}
+.card{background:#111;border:1px solid #2a2a2a;border-radius:20px;padding:36px 32px;width:100%;max-width:380px;}
+.logo-row{text-align:center;margin-bottom:28px;}
+.logo-row img{height:44px;object-fit:contain;}
+.brand{font-size:20px;font-weight:900;color:#3d8b3d;margin-top:8px;}
+.sub{font-size:12px;color:#666;margin-top:2px;}
+.field-label{font-size:12px;color:#888;margin-bottom:6px;font-weight:600;}
+.field{background:#1a1a1a;border:1px solid #333;color:#f0f0f0;font-size:15px;padding:13px 14px;border-radius:12px;width:100%;outline:none;margin-bottom:16px;}
+.field:focus{border-color:#3d8b3d;}
+.btn-login{background:#3d8b3d;border:none;color:#fff;font-size:16px;font-weight:700;padding:14px;border-radius:12px;width:100%;cursor:pointer;margin-top:4px;}
+.btn-login:hover{background:#2d6b2d;}
+.error{background:#3a0d0d;border:1px solid #6b1515;color:#ff6b6b;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px;}
+.footer-note{font-size:11px;color:#444;text-align:center;margin-top:20px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo-row">
+    <img src="/static/mcdonalds_logo.jpg" alt="McDonald's" style="height:60px;border-radius:8px;">
+    <div class="brand" style="margin-top:14px;">Client Portal</div>
+    <div class="sub">Ridgeline Services — Cleaning Operations</div>
+  </div>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST">
+    <div class="field-label">Username</div>
+    <input class="field" type="text" name="username" autocomplete="username" autocapitalize="none" required placeholder="Enter username">
+    <div class="field-label">Password</div>
+    <input class="field" type="password" name="password" autocomplete="current-password" required placeholder="Enter password">
+    <button class="btn-login" type="submit">Sign In</button>
+  </form>
+</div>
+<div class="footer-note">Ridgeline Services — McDonald's Cleaning Operations</div>
+</body>
+</html>

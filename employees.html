@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ridgeline">
+<title>Ridgeline — Employees</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;}
+.topbar{background:#111;border-bottom:1px solid #222;padding:0 18px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.topbar img{height:30px;object-fit:contain;}
+.topbar-name{font-size:16px;font-weight:900;color:#3d8b3d;flex:1;}
+.btn-back{font-size:12px;color:#666;text-decoration:none;}
+.btn-back:hover{color:#aaa;}
+
+.wrap{max-width:640px;margin:0 auto;padding:20px 16px 60px;}
+.section-title{font-size:20px;font-weight:900;margin-bottom:4px;}
+.section-sub{font-size:13px;color:#666;margin-bottom:20px;}
+
+/* Tabs */
+.tabs{display:flex;gap:0;background:#111;border:1px solid #222;border-radius:12px;padding:4px;margin-bottom:24px;}
+.tab{flex:1;padding:10px;border-radius:9px;border:none;background:transparent;color:#666;font-size:14px;font-weight:600;cursor:pointer;}
+.tab.active{background:#3d8b3d;color:#fff;}
+
+/* Add employee */
+.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:20px;margin-bottom:20px;}
+.card-title{font-size:16px;font-weight:700;margin-bottom:16px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+@media(max-width:420px){.form-row{grid-template-columns:1fr;}}
+.input{width:100%;background:#111;border:1px solid #333;color:#f0f0f0;font-size:15px;padding:12px 14px;border-radius:10px;outline:none;}
+.input:focus{border-color:#3d8b3d;}
+.input-label{font-size:12px;color:#888;margin-bottom:6px;}
+.btn-add{background:#3d8b3d;border:none;color:#fff;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;width:100%;}
+.btn-add:active{background:#2d6b2d;}
+.form-err{color:#ff6b6b;font-size:13px;min-height:16px;margin-top:6px;}
+
+/* Employee list */
+.emp-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;}
+.emp-avatar{width:44px;height:44px;border-radius:50%;background:#3d8b3d;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;flex-shrink:0;}
+.emp-avatar.inactive{background:#333;color:#666;}
+.emp-info{flex:1;}
+.emp-name{font-size:15px;font-weight:700;color:#f0f0f0;}
+.emp-pin{font-size:12px;color:#666;margin-top:2px;}
+.emp-status{font-size:11px;padding:3px 8px;border-radius:99px;margin-top:4px;display:inline-block;}
+.emp-status.active{background:#1f3a1f;color:#4caf50;}
+.emp-status.inactive{background:#2a2a2a;color:#666;}
+.emp-actions{display:flex;gap:8px;flex-shrink:0;}
+.btn-sm{background:#111;border:1px solid #333;color:#ccc;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-sm:hover{border-color:#3d8b3d;color:#3d8b3d;}
+.btn-sm.red:hover{border-color:#b71c1c;color:#ef5350;}
+.emp-empty{text-align:center;padding:40px 20px;color:#444;}
+
+/* Site config */
+.site-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:12px;}
+.site-card-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.site-icon{font-size:28px;}
+.site-info strong{font-size:15px;display:block;}
+.site-info span{font-size:12px;color:#666;}
+.kitchen-badge{font-size:11px;padding:2px 8px;border-radius:99px;background:#2a1a3a;color:#ce93d8;border:1px solid #4a2a6a;margin-top:4px;display:inline-block;}
+
+.days-label{font-size:12px;color:#888;margin-bottom:8px;font-weight:700;}
+.days-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.day-toggle{background:#111;border:1px solid #333;color:#666;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;user-select:none;min-width:38px;text-align:center;}
+.day-toggle.on{background:#1f2e1f;border-color:#3d8b3d;color:#3d8b3d;}
+
+.assign-label{font-size:12px;color:#888;margin-bottom:8px;font-weight:700;}
+.emp-checks{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+.emp-check-row{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.emp-check-row input{width:16px;height:16px;accent-color:#3d8b3d;}
+.emp-check-row span{font-size:14px;color:#ccc;}
+.emp-check-row.all-emp{font-style:italic;color:#888;}
+
+.btn-save-site{background:#3d8b3d;border:none;color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-save-site:active{background:#2d6b2d;}
+.save-status{font-size:12px;color:#4caf50;margin-left:10px;opacity:0;transition:opacity .3s;}
+
+/* Edit modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;padding:20px;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:#111;border:1px solid #2a2a2a;border-radius:20px;padding:24px;width:100%;max-width:360px;}
+.modal-title{font-size:18px;font-weight:900;margin-bottom:16px;}
+.modal-actions{display:flex;gap:10px;margin-top:16px;}
+.btn-modal{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none;}
+.btn-modal.save{background:#3d8b3d;color:#fff;}
+.btn-modal.cancel{background:#222;color:#aaa;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="topbar-name">Employees & Sites</div>
+  <a href="/checklists" class="btn-back">← Checklists</a>
+</div>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('employees')">👥 Employees</button>
+    <button class="tab" onclick="showTab('sites')">🏪 Sites</button>
+  </div>
+
+  <!-- Employees tab -->
+  <div id="tabEmployees">
+    <div class="card">
+      <div class="card-title">Add Employee</div>
+      <div class="form-row">
+        <div>
+          <div class="input-label">Full Name</div>
+          <input class="input" id="newName" placeholder="e.g. Sarah Jones" type="text">
+        </div>
+        <div>
+          <div class="input-label">4-Digit PIN</div>
+          <input class="input" id="newPin" placeholder="e.g. 1234" type="number" maxlength="4" inputmode="numeric">
+        </div>
+      </div>
+      <button class="btn-add" onclick="addEmployee()">+ Add Employee</button>
+      <div class="form-err" id="empErr"></div>
+    </div>
+
+    <div class="section-title">Your Team</div>
+    <div class="section-sub">Employees use their PIN to sign into the cleaning checklist</div>
+    <div id="empList"><div class="emp-empty">Loading…</div></div>
+  </div>
+
+  <!-- Sites tab -->
+  <div id="tabSites" style="display:none">
+    <div class="section-title">Site Configuration</div>
+    <div class="section-sub">Set which days each site needs cleaning and which employees are assigned</div>
+    <div id="siteList"><div class="emp-empty">Loading…</div></div>
+  </div>
+</div>
+
+<!-- Edit employee modal -->
+<div class="modal-bg" id="editModal" onclick="closeEditModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Edit Employee</div>
+    <div class="input-label">Full Name</div>
+    <input class="input" id="editName" style="margin-bottom:12px;">
+    <div class="input-label">New PIN (leave blank to keep current)</div>
+    <input class="input" id="editPin" placeholder="••••" type="number" maxlength="4" inputmode="numeric" style="margin-bottom:4px;">
+    <div class="modal-actions">
+      <button class="btn-modal cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-modal save" onclick="saveEmployee()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ALL_DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
+const DAY_LABEL = {sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'};
+let employees = [];
+let sites = [];
+let editingEmpId = null;
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function showTab(tab) {
+  document.getElementById('tabEmployees').style.display = tab==='employees'?'block':'none';
+  document.getElementById('tabSites').style.display = tab==='sites'?'block':'none';
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(tab==='employees'&&i===0)||(tab==='sites'&&i===1)));
+  if (tab==='sites') loadSites();
+}
+
+// ── Employees ──────────────────────────────────────────────────────────────
+async function loadEmployees() {
+  try {
+    const r = await fetch('/api/employees');
+    employees = await r.json();
+    renderEmployees();
+  } catch(e) {}
+}
+
+function renderEmployees() {
+  const wrap = document.getElementById('empList');
+  if (!employees.length) {
+    wrap.innerHTML='<div class="emp-empty">No employees yet. Add your first team member above.</div>';
+    return;
+  }
+  wrap.innerHTML = employees.map(e => `
+    <div class="emp-card">
+      <div class="emp-avatar ${e.active===false?'inactive':''}">${(e.name||'?')[0].toUpperCase()}</div>
+      <div class="emp-info">
+        <div class="emp-name">${e.name}</div>
+        <div class="emp-pin">PIN: ${'•'.repeat((e.pin||'').length)} (${(e.pin||'').length} digits)</div>
+        <span class="emp-status ${e.active===false?'inactive':'active'}">${e.active===false?'Inactive':'Active'}</span>
+      </div>
+      <div class="emp-actions">
+        <button class="btn-sm" onclick="openEditModal('${e.id}')">Edit</button>
+        <button class="btn-sm" onclick="toggleActive('${e.id}', ${e.active!==false})">${e.active===false?'Enable':'Disable'}</button>
+        <button class="btn-sm red" onclick="deleteEmployee('${e.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+async function addEmployee() {
+  const name = document.getElementById('newName').value.trim();
+  const pin  = document.getElementById('newPin').value.trim();
+  document.getElementById('empErr').textContent = '';
+  if (!name) { document.getElementById('empErr').textContent='Name is required'; return; }
+  if (!pin || pin.length!==4 || !/^\d{4}$/.test(pin)) { document.getElementById('empErr').textContent='PIN must be exactly 4 digits'; return; }
+  try {
+    const r = await fetch('/api/employees', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, pin})
+    });
+    if (r.ok) {
+      document.getElementById('newName').value='';
+      document.getElementById('newPin').value='';
+      loadEmployees();
+    }
+  } catch(e) {}
+}
+
+function openEditModal(empId) {
+  const emp = employees.find(e=>e.id===empId);
+  if (!emp) return;
+  editingEmpId = empId;
+  document.getElementById('editName').value = emp.name;
+  document.getElementById('editPin').value = '';
+  document.getElementById('editModal').classList.add('open');
+}
+
+async function saveEmployee() {
+  if (!editingEmpId) return;
+  const name = document.getElementById('editName').value.trim();
+  const pin  = document.getElementById('editPin').value.trim();
+  if (!name) return;
+  const data = {name};
+  if (pin) { if (!/^\d{4}$/.test(pin)) { alert('PIN must be 4 digits'); return; } data.pin = pin; }
+  try {
+    await fetch(`/api/employees/${editingEmpId}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+    });
+    closeEditModal();
+    loadEmployees();
+  } catch(e) {}
+}
+
+async function toggleActive(empId, currentlyActive) {
+  try {
+    await fetch(`/api/employees/${empId}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({active: !currentlyActive})
+    });
+    loadEmployees();
+  } catch(e) {}
+}
+
+async function deleteEmployee(empId) {
+  if (!confirm('Delete this employee? This cannot be undone.')) return;
+  try {
+    await fetch(`/api/employees/${empId}`, {method:'DELETE'});
+    loadEmployees();
+  } catch(e) {}
+}
+
+function closeEditModal(e) {
+  if (!e || e.target.id==='editModal') document.getElementById('editModal').classList.remove('open');
+}
+
+// ── Sites ──────────────────────────────────────────────────────────────────
+async function loadSites() {
+  try {
+    const r = await fetch('/api/sites');
+    sites = await r.json();
+    renderSites();
+  } catch(e) {}
+}
+
+function renderSites() {
+  const wrap = document.getElementById('siteList');
+  if (!sites.length) { wrap.innerHTML='<div class="emp-empty">No sites found</div>'; return; }
+  wrap.innerHTML = '';
+  sites.forEach(site => {
+    const card = document.createElement('div');
+    card.className = 'site-card';
+    card.id = `site-card-${site.id}`;
+    const assignedDays = site.assigned_days || ALL_DAYS;
+    const assignedEmps = site.assigned_employees || [];
+
+    card.innerHTML = `
+      <div class="site-card-header">
+        <div class="site-icon">🍔</div>
+        <div class="site-info">
+          <strong>${site.name}</strong>
+          <span>${site.id}</span>
+          ${site.has_kitchen ? '<div class="kitchen-badge">🍳 Has Kitchen</div>' : ''}
+        </div>
+      </div>
+
+      <div class="days-label">Active Days</div>
+      <div class="days-row" id="days-${site.id}">
+        ${ALL_DAYS.map(d=>`
+          <div class="day-toggle ${assignedDays.includes(d)?'on':''}"
+               onclick="toggleDay('${site.id}','${d}',this)">${DAY_LABEL[d]}</div>
+        `).join('')}
+      </div>
+
+      <div class="assign-label">Assigned Employees</div>
+      <div class="emp-checks" id="empChecks-${site.id}">
+        <label class="emp-check-row all-emp">
+          <input type="checkbox" id="all-${site.id}" ${!assignedEmps.length?'checked':''}
+                 onchange="toggleAllEmployees('${site.id}', this.checked)">
+          <span>All employees</span>
+        </label>
+        ${employees.map(e=>`
+          <label class="emp-check-row" id="emprow-${site.id}-${e.id}">
+            <input type="checkbox" id="empcheck-${site.id}-${e.id}"
+                   ${assignedEmps.includes(e.id)?'checked':''}
+                   onchange="empCheckChanged('${site.id}')">
+            <span>${e.name}</span>
+          </label>
+        `).join('')}
+      </div>
+
+      <button class="btn-save-site" onclick="saveSite('${site.id}')">Save Changes</button>
+      <span class="save-status" id="save-status-${site.id}">✓ Saved</span>
+    `;
+    wrap.appendChild(card);
+  });
+}
+
+function toggleDay(siteId, day, el) {
+  el.classList.toggle('on');
+}
+
+function toggleAllEmployees(siteId, allChecked) {
+  const site = sites.find(s=>s.id===siteId);
+  if (!site) return;
+  employees.forEach(e => {
+    const cb = document.getElementById(`empcheck-${siteId}-${e.id}`);
+    if (cb) cb.checked = false;
+  });
+}
+
+function empCheckChanged(siteId) {
+  const allCb = document.getElementById(`all-${siteId}`);
+  const anyChecked = employees.some(e => {
+    const cb = document.getElementById(`empcheck-${siteId}-${e.id}`);
+    return cb && cb.checked;
+  });
+  if (allCb) allCb.checked = !anyChecked;
+}
+
+async function saveSite(siteId) {
+  const activeDays = [];
+  document.querySelectorAll(`#days-${siteId} .day-toggle.on`).forEach(el => {
+    activeDays.push(el.textContent.toLowerCase().trim());
+  });
+  // Map label back to abbr
+  const labelToAbbr = {sun:'sun',mon:'mon',tue:'tue',wed:'wed',thu:'thu',fri:'fri',sat:'sat'};
+  const days = activeDays.map(d => Object.entries(labelToAbbr).find(([k,v])=>v===d.toLowerCase())?.[0]||d);
+
+  const allCb = document.getElementById(`all-${siteId}`);
+  let assignedEmps = [];
+  if (!allCb?.checked) {
+    employees.forEach(e => {
+      const cb = document.getElementById(`empcheck-${siteId}-${e.id}`);
+      if (cb?.checked) assignedEmps.push(e.id);
+    });
+  }
+
+  try {
+    await fetch(`/api/sites/${siteId}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({assigned_days: days, assigned_employees: assignedEmps, enabled: true})
+    });
+    const statusEl = document.getElementById(`save-status-${siteId}`);
+    statusEl.style.opacity='1';
+    setTimeout(()=>statusEl.style.opacity='0', 2000);
+  } catch(e) { alert('Error saving site config'); }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadEmployees();
+</script>
+</body>
+</html>

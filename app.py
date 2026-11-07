@@ -12,6 +12,8 @@ try:
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.colors import HexColor
+    from reportlab.lib.utils import ImageReader
+    import base64 as _b64
     REPORTLAB = True
 except ImportError:
     REPORTLAB = False
@@ -33,7 +35,9 @@ DATA_DIR     = os.path.join(os.path.dirname(__file__), 'data')
 PHOTOS_DIR   = os.path.join(DATA_DIR, 'photos')
 QUOTES_FILE  = os.path.join(DATA_DIR, 'quotes.json')
 EXPENSES_FILE= os.path.join(DATA_DIR, 'expenses.json')
-TRUCKS_FILE  = os.path.join(DATA_DIR, 'trucks.json')
+TRUCKS_FILE      = os.path.join(DATA_DIR, 'trucks.json')
+EMPLOYEES_FILE   = os.path.join(DATA_DIR, 'employees.json')
+CHECKLISTS_FILE  = os.path.join(DATA_DIR, 'checklists.json')
 ALLOWED_EXT  = {'png','jpg','jpeg','gif','webp','heic'}
 
 # ── Item pricing ──────────────────────────────────────────────────────────────
@@ -76,6 +80,14 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if not session.get('logged_in'):
             return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+def client_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('client_id'):
+            return redirect(url_for('client_login'))
         return f(*args, **kwargs)
     return decorated
 
@@ -377,7 +389,7 @@ def _build_invoice_pdf(q):
     # Footer
     c.setFillColor(HexColor('#f5f5f5'))
     c.rect(0, 0, W, 50, fill=1, stroke=0)
-    txt('Thank you for choosing Ridgeline Rubbish Removal', W/2, 30,
+    txt('Thank you for choosing Ridgeline Services', W/2, 30,
         'Helvetica-Bold', 10, GREEN, 'center')
     txt(f'{BUSINESS_PHONE}  |  {BASE_ADDRESS}', W/2, 16,
         'Helvetica', 9, GREY, 'center')
@@ -417,9 +429,9 @@ def api_send_invoice(qid):
         pdf_buf  = _build_invoice_pdf(q)
         qnum     = q.get('quote_number', qid)
         msg      = MIMEMultipart()
-        msg['From']    = f'Ridgeline Rubbish Removal <{SMTP_USER}>'
+        msg['From']    = f'Ridgeline Services <{SMTP_USER}>'
         msg['To']      = recipient
-        msg['Subject'] = f'Invoice {qnum} — Ridgeline Rubbish Removal'
+        msg['Subject'] = f'Invoice {qnum} — Ridgeline Services'
 
         total = q.get('total', 0)
         body  = (f"Hi {q.get('customer_name','')},\n\n"
@@ -427,7 +439,7 @@ def api_send_invoice(qid):
                  f"Quote: {qnum}\n"
                  f"Address: {q.get('address','')}\n"
                  f"Total: ${total:.2f}\n\n"
-                 f"Thank you for choosing Ridgeline Rubbish Removal!\n"
+                 f"Thank you for choosing Ridgeline Services!\n"
                  f"{BUSINESS_PHONE}  |  {BASE_ADDRESS}")
         msg.attach(MIMEText(body, 'plain'))
 
@@ -582,6 +594,855 @@ def api_stats():
         'accepted_quotes': sum(1 for q in quotes if q.get('status')=='accepted'),
     })
 
+# ── Checklist Templates ───────────────────────────────────────────────────────
+_DAILY_COMMON = [
+    {'name': 'Tables, Chairs and Sofas', 'tasks': [
+        'Tables, chairs and sofas wiped',
+        'All corners wiped',
+        'All stone benches including front counter and condiment bar wiped',
+    ]},
+    {'name': 'Bins', 'tasks': [
+        'Bin housing wiped all sides',
+        'Bin doors wiped all sides',
+        'Bin washed when needed',
+    ]},
+    {'name': 'Toilets, Customer and Crew', 'tasks': [
+        'Doors wiped both sides',
+        'Wall tiles wiped',
+        'Wooden walls wiped',
+        'Sinks and under sinks wiped',
+        'Toilet scrubbed and bowl wiped',
+        'Brush and squeegee toilet mirrors',
+        'Soap holder filled and wiped',
+        'Toilet paper holder filled and wiped',
+    ]},
+]
+_CARPARK = {'name': 'Carpark', 'tasks': [
+    'All rubbish removed',
+    'All bins wiped all sides including mouth spout',
+    'All menu boards and directional signs wiped down',
+    'Spider webs cleaned',
+    'Drive-through scrubbed',
+    'Carpark spills washed',
+]}
+_STAINLESS = {'name': 'Stainless Steel', 'tasks': [
+    'Buffer used on all store stainless',
+    'All toilet stainless buffed including door jambs',
+    'All stainless legs buffed',
+]}
+_WALLS = {'name': 'Walls', 'tasks': [
+    'All walls wiped, especially the bottom part',
+    'Drive-through wall wiped',
+]}
+_WINDOWS = {'name': 'Windows', 'tasks': [
+    'All windows cleaned both sides',
+    'All window sills wiped with a cloth',
+    'Toy display glass cleaned',
+]}
+
+SITES_FILE   = os.path.join(DATA_DIR, 'sites.json')
+ARRIVALS_FILE = os.path.join(DATA_DIR, 'arrivals.json')
+CLIENTS_FILE  = os.path.join(DATA_DIR, 'clients.json')
+
+PROOF_PHOTOS_STANDARD = [
+    {'key': 'dining_in',  'label': 'Dining Area Inside'},
+    {'key': 'bathroom',   'label': 'Bathroom'},
+    {'key': 'dining_out', 'label': 'Dining Area Outside'},
+]
+PROOF_PHOTOS_KITCHEN = PROOF_PHOTOS_STANDARD + [
+    {'key': 'floors',     'label': 'Floors'},
+    {'key': 'equipment',  'label': 'Behind Equipment'},
+]
+
+CHECKLIST_TEMPLATES = {
+    'cambridge': {
+        'name': "Cambridge Gardens McDonald's",
+        'has_kitchen': True,
+        'daily_sections': _DAILY_COMMON + [
+            {'name': 'Dining and Patio', 'tasks': [
+                'All corners swept',
+                'Chairs moved and under swept',
+                'All baseboards mopped',
+                'Dining floor mopped',
+                'Under all sofas and chairs mopped',
+                'All door frames wiped',
+                'Playlands cleaned',
+                'Patio mopped',
+            ]},
+            _WINDOWS, _WALLS, _STAINLESS, _CARPARK,
+            {'name': 'Corral', 'tasks': [
+                'All rubbish removed',
+                'Corral washed',
+            ]},
+            {'name': 'Kitchen Floor', 'tasks': [
+                'All floors swept including under equipment',
+                'Behind trolleys and fridges swept and mopped',
+                'All main areas scrubbed including back corridor',
+                'All drains washed',
+            ]},
+        ],
+        'weekly_items': [
+            {'task': 'Dining and patio floor scrubbed, including toilets',              'days': ['sun']},
+            {'task': 'Windows cleaned to very top and behind playland equipment',       'days': ['mon','thu']},
+            {'task': 'Corral scrubbed with hot water and degreaser',                   'days': ['sun','tue','thu','sat']},
+            {'task': 'Crew room and crew toilets scrubbed',                             'days': ['wed']},
+            {'task': 'All toilets fully bleached including crew toilets',               'days': ['wed']},
+            {'task': 'Grills pulled',                                                   'days': ['sun','wed']},
+            {'task': 'Vats pulled',                                                     'days': ['mon','thu']},
+            {'task': 'All beverage cell machines pulled',                               'days': ['tue','fri']},
+            {'task': 'All kitchen baseboards detailed with power pad or other means',   'days': ['sat']},
+        ],
+    },
+    'blaxland': {
+        'name': "Blaxland McDonald's",
+        'has_kitchen': False,
+        'daily_sections': _DAILY_COMMON + [
+            {'name': 'Dining and Patio', 'tasks': [
+                'All corners swept',
+                'Chairs moved and under swept',
+                'All baseboards mopped',
+                'Dining floor mopped',
+                'Under all sofas and chairs mopped',
+                'All door frames wiped',
+                'Patio mopped',
+            ]},
+            _WINDOWS, _WALLS, _STAINLESS, _CARPARK,
+        ],
+        'weekly_items': [
+            {'task': 'Dining and patio floor scrubbed, including toilets',        'days': ['sun']},
+            {'task': 'Windows cleaned to very top and behind playland equipment', 'days': ['mon','thu']},
+            {'task': 'Crew room and crew toilets scrubbed',                       'days': ['wed']},
+            {'task': 'All toilets fully bleached including crew toilets',         'days': ['wed']},
+        ],
+    },
+}
+
+# Day abbreviation used in templates ('sun','mon',…)
+_DAY_NAMES = ['mon','tue','wed','thu','fri','sat','sun']  # weekday() 0=Mon…6=Sun
+
+def _today_day_abbr():
+    return _DAY_NAMES[datetime.now().weekday()]
+
+# ── Employee auth ─────────────────────────────────────────────────────────────
+def employee_or_admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('employee_id') and not session.get('logged_in'):
+            return redirect(url_for('checklist_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+# ── Employees routes ──────────────────────────────────────────────────────────
+@app.route('/employees')
+@login_required
+def employees_page():
+    return render_template('employees.html')
+
+# ── Checklist routes ──────────────────────────────────────────────────────────
+@app.route('/checklist/login', methods=['GET','POST'])
+def checklist_login():
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        emp_id  = data.get('id','')
+        pin     = data.get('pin','').strip()
+        emps    = load_json(EMPLOYEES_FILE)
+        emp     = next((e for e in emps if e['id']==emp_id and e.get('pin','')==pin and e.get('active',True)), None)
+        if emp:
+            session['employee_id']   = emp['id']
+            session['employee_name'] = emp['name']
+            return jsonify({'ok': True, 'name': emp['name']})
+        return jsonify({'error': 'Wrong PIN'}), 401
+    return render_template('checklist.html', templates=CHECKLIST_TEMPLATES, today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+
+@app.route('/checklist')
+def checklist_home():
+    return render_template('checklist.html', templates=CHECKLIST_TEMPLATES, today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+
+@app.route('/checklist/logout')
+def checklist_logout():
+    session.pop('employee_id', None)
+    session.pop('employee_name', None)
+    return redirect(url_for('checklist_home'))
+
+@app.route('/checklists')
+@login_required
+def checklists_page():
+    return render_template('checklists.html')
+
+# ── Employee APIs ─────────────────────────────────────────────────────────────
+@app.route('/api/employees', methods=['GET'])
+def api_get_employees():
+    emps = load_json(EMPLOYEES_FILE)
+    # Public endpoint: strip PINs unless admin
+    if session.get('logged_in'):
+        return jsonify(emps)
+    return jsonify([{'id': e['id'], 'name': e['name'], 'active': e.get('active', True)} for e in emps if e.get('active', True)])
+
+@app.route('/api/employees', methods=['POST'])
+@login_required
+def api_create_employee():
+    ensure_dirs()
+    data = request.get_json()
+    emps = load_json(EMPLOYEES_FILE)
+    emp = {
+        'id':     str(uuid.uuid4()),
+        'name':   data.get('name','').strip(),
+        'pin':    data.get('pin','').strip(),
+        'active': True,
+    }
+    emps.append(emp)
+    save_json(EMPLOYEES_FILE, emps)
+    return jsonify(emp), 201
+
+@app.route('/api/employees/<eid>', methods=['PUT'])
+@login_required
+def api_update_employee(eid):
+    emps = load_json(EMPLOYEES_FILE)
+    idx  = next((i for i,e in enumerate(emps) if e['id']==eid), None)
+    if idx is None: return ('Not found', 404)
+    emps[idx].update(request.get_json())
+    save_json(EMPLOYEES_FILE, emps)
+    return jsonify(emps[idx])
+
+@app.route('/api/employees/<eid>', methods=['DELETE'])
+@login_required
+def api_delete_employee(eid):
+    emps = load_json(EMPLOYEES_FILE)
+    emps = [e for e in emps if e['id'] != eid]
+    save_json(EMPLOYEES_FILE, emps)
+    return jsonify({'ok': True})
+
+# ── Checklist template API ────────────────────────────────────────────────────
+@app.route('/api/checklist/template/<site_id>')
+def api_checklist_template(site_id):
+    t = CHECKLIST_TEMPLATES.get(site_id)
+    if not t: return ('Not found', 404)
+    day = request.args.get('day', _today_day_abbr())
+    weekly_today = [w['task'] for w in t['weekly_items'] if day in w['days']]
+    has_kitchen = t.get('has_kitchen', False)
+    return jsonify({
+        'site_id':        site_id,
+        'site_name':      t['name'],
+        'has_kitchen':    has_kitchen,
+        'daily_sections': t['daily_sections'],
+        'weekly_today':   weekly_today,
+        'day':            day,
+        'proof_photos':   PROOF_PHOTOS_KITCHEN if has_kitchen else PROOF_PHOTOS_STANDARD,
+    })
+
+# ── Site config helpers ───────────────────────────────────────────────────────
+def load_all_site_configs():
+    try:
+        with open(SITES_FILE) as f: return json.load(f)
+    except: return {}
+
+def save_all_site_configs(configs):
+    with open(SITES_FILE, 'w') as f: json.dump(configs, f, indent=2)
+
+def site_config(site_id):
+    return load_all_site_configs().get(site_id, {
+        'assigned_days': _DAY_NAMES,
+        'assigned_employees': [],
+        'enabled': True,
+    })
+
+# ── Site APIs ─────────────────────────────────────────────────────────────────
+@app.route('/api/sites', methods=['GET'])
+@login_required
+def api_get_sites():
+    all_cfg = load_all_site_configs()
+    result = []
+    for sid, t in CHECKLIST_TEMPLATES.items():
+        cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
+        result.append({'id': sid, 'name': t['name'], 'has_kitchen': t.get('has_kitchen', False), **cfg})
+    return jsonify(result)
+
+@app.route('/api/sites/<site_id>', methods=['PUT'])
+@login_required
+def api_update_site(site_id):
+    if site_id not in CHECKLIST_TEMPLATES: return ('Not found', 404)
+    cfg = load_all_site_configs()
+    cfg[site_id] = request.get_json()
+    save_all_site_configs(cfg)
+    return jsonify({'ok': True})
+
+@app.route('/api/sites/today')
+def api_sites_today():
+    day    = _today_day_abbr()
+    emp_id = session.get('employee_id')
+    all_cfg = load_all_site_configs()
+    result = []
+    for sid, t in CHECKLIST_TEMPLATES.items():
+        cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
+        if not cfg.get('enabled', True): continue
+        if day not in cfg.get('assigned_days', _DAY_NAMES): continue
+        assigned = cfg.get('assigned_employees', [])
+        if assigned and emp_id and emp_id not in assigned: continue
+        result.append({'id': sid, 'name': t['name'], 'has_kitchen': t.get('has_kitchen', False)})
+    return jsonify(result)
+
+@app.route('/api/sites/week')
+def api_sites_week():
+    emp_id  = session.get('employee_id')
+    all_cfg = load_all_site_configs()
+    week = {}
+    for day in _DAY_NAMES:
+        sites = []
+        for sid, t in CHECKLIST_TEMPLATES.items():
+            cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
+            if not cfg.get('enabled', True): continue
+            if day not in cfg.get('assigned_days', _DAY_NAMES): continue
+            assigned = cfg.get('assigned_employees', [])
+            if assigned and emp_id and emp_id not in assigned: continue
+            sites.append({'id': sid, 'name': t['name']})
+        week[day] = sites
+    return jsonify(week)
+
+# ── Session check for employee ─────────────────────────────────────────────────
+@app.route('/api/checklist/session')
+def api_checklist_session():
+    if session.get('employee_id'):
+        return jsonify({'employee_id': session['employee_id'], 'employee_name': session['employee_name']})
+    if session.get('logged_in'):
+        return jsonify({'employee_id': 'admin', 'employee_name': 'Admin'})
+    return jsonify({}), 200
+
+# ── Arrival photo ─────────────────────────────────────────────────────────────
+@app.route('/api/arrivals', methods=['POST'])
+def api_post_arrival():
+    if not session.get('employee_id') and not session.get('logged_in'):
+        return jsonify({'error': 'Not authenticated'}), 401
+    ensure_dirs()
+    record = {
+        'id':            str(uuid.uuid4()),
+        'employee_id':   session.get('employee_id',''),
+        'employee_name': session.get('employee_name','Admin'),
+        'site_id':       request.form.get('site_id',''),
+        'site_name':     CHECKLIST_TEMPLATES.get(request.form.get('site_id',''), {}).get('name',''),
+        'arrived_at':    datetime.now().isoformat(),
+        'lat':           request.form.get('lat',''),
+        'lng':           request.form.get('lng',''),
+        'accuracy':      request.form.get('accuracy',''),
+        'photo':         '',
+    }
+    if 'photo' in request.files:
+        f = request.files['photo']
+        if f and allowed_file(f.filename):
+            arr_dir = os.path.join(PHOTOS_DIR, 'arrivals')
+            os.makedirs(arr_dir, exist_ok=True)
+            ext = f.filename.rsplit('.',1)[1].lower() if '.' in f.filename else 'jpg'
+            fn  = f"{record['id']}.{ext}"
+            f.save(os.path.join(arr_dir, fn))
+            record['photo'] = fn
+    arrivals = load_json(ARRIVALS_FILE)
+    arrivals.insert(0, record)
+    save_json(ARRIVALS_FILE, arrivals)
+    return jsonify({'id': record['id'], 'ok': True}), 201
+
+@app.route('/arrival-photos/<filename>')
+@login_required
+def arrival_photo_serve(filename):
+    return send_from_directory(os.path.join(PHOTOS_DIR, 'arrivals'), filename)
+
+# ── Proof photo upload ────────────────────────────────────────────────────────
+@app.route('/api/checklist/<cid>/proof/<photo_key>', methods=['POST'])
+def api_upload_proof(cid, photo_key):
+    if not session.get('employee_id') and not session.get('logged_in'):
+        return jsonify({'error': 'Not authenticated'}), 401
+    ensure_dirs()
+    if 'photo' not in request.files: return jsonify({'error':'No file'}), 400
+    f = request.files['photo']
+    if not allowed_file(f.filename): return jsonify({'error':'Invalid type'}), 400
+    ext = f.filename.rsplit('.',1)[1].lower() if '.' in f.filename else 'jpg'
+    proof_dir = os.path.join(PHOTOS_DIR, 'proofs')
+    os.makedirs(proof_dir, exist_ok=True)
+    fn = f'{cid}_{photo_key}.{ext}'
+    f.save(os.path.join(proof_dir, fn))
+    checklists = load_json(CHECKLISTS_FILE)
+    idx = next((i for i,x in enumerate(checklists) if x['id']==cid), None)
+    if idx is not None:
+        if 'proof_photos' not in checklists[idx]: checklists[idx]['proof_photos'] = {}
+        checklists[idx]['proof_photos'][photo_key] = fn
+        save_json(CHECKLISTS_FILE, checklists)
+    return jsonify({'photo': fn})
+
+@app.route('/proof-photos/<filename>')
+@login_required
+def proof_photo_serve(filename):
+    return send_from_directory(os.path.join(PHOTOS_DIR, 'proofs'), filename)
+
+# ── Checklist submit API ──────────────────────────────────────────────────────
+@app.route('/api/checklist', methods=['POST'])
+def api_submit_checklist():
+    if not session.get('employee_id') and not session.get('logged_in'):
+        return jsonify({'error': 'Not authenticated'}), 401
+    ensure_dirs()
+    data = request.get_json()
+    record = {
+        'id':            str(uuid.uuid4()),
+        'site_id':       data.get('site_id',''),
+        'site_name':     data.get('site_name',''),
+        'date':          data.get('date', datetime.now().strftime('%Y-%m-%d')),
+        'day':           data.get('day',''),
+        'employee_id':   session.get('employee_id','admin'),
+        'employee_name': session.get('employee_name', 'Admin'),
+        'submitted_at':  datetime.now().isoformat(),
+        'daily_items':   data.get('daily_items', {}),
+        'weekly_items':  data.get('weekly_items', {}),
+        'notes':            data.get('notes',''),
+        'arrival_id':       data.get('arrival_id',''),
+        'manager_name':     data.get('manager_name',''),
+        'manager_signature': data.get('manager_signature',''),  # base64 PNG data URL
+        'proof_photos':     {},
+    }
+    # Count totals
+    total = done = 0
+    for tasks in record['daily_items'].values():
+        for v in tasks.values():
+            total += 1
+            if v: done += 1
+    for v in record['weekly_items'].values():
+        total += 1
+        if v: done += 1
+    record['total_tasks'] = total
+    record['done_tasks']  = done
+
+    checklists = load_json(CHECKLISTS_FILE)
+    checklists.insert(0, record)
+    save_json(CHECKLISTS_FILE, checklists)
+    return jsonify({'id': record['id'], 'done': done, 'total': total}), 201
+
+@app.route('/api/checklist', methods=['GET'])
+@login_required
+def api_get_checklists():
+    cls  = load_json(CHECKLISTS_FILE)
+    site = request.args.get('site')
+    date = request.args.get('date')
+    emp  = request.args.get('employee')
+    if site: cls = [c for c in cls if c.get('site_id') == site]
+    if date: cls = [c for c in cls if c.get('date') == date]
+    if emp:  cls = [c for c in cls if c.get('employee_name','').lower().find(emp.lower()) >= 0]
+    return jsonify(cls)
+
+# ── Checklist PDF ─────────────────────────────────────────────────────────────
+def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
+    buf = io.BytesIO()
+    if not REPORTLAB:
+        buf.write(b'ReportLab not installed')
+        buf.seek(0)
+        return buf
+
+    W, H = A4
+    M    = 40
+    GREEN = HexColor('#3d8b3d')
+    BLUE  = HexColor('#1565c0')
+    DARK  = HexColor('#111111')
+    GREY  = HexColor('#888888')
+    LGREY = HexColor('#cccccc')
+    DKGRN = HexColor('#2e7d32')
+    RED   = HexColor('#b71c1c')
+
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    page_y = [H]  # mutable for nested function
+
+    # McDonald's logo path (for client PDFs)
+    _mcdo_logo = os.path.join(os.path.dirname(__file__), 'static', 'mcdonalds_logo.jpg')
+
+    def draw_header_bar():
+        c.setFillColor(GREEN)
+        c.rect(0, H - 76, W, 76, fill=1, stroke=0)
+        c.setFont('Helvetica-Bold', 16)
+        c.setFillColor(HexColor('#ffffff'))
+        c.drawString(M, H - 28, 'RIDGELINE SERVICES — CLEANING CHECKLIST')
+        c.setFont('Helvetica-Bold', 11)
+        c.drawString(M, H - 46, cl.get('site_name',''))
+        # McDonald's logo on client PDFs
+        if hide_employee and os.path.exists(_mcdo_logo):
+            try:
+                logo_img = ImageReader(_mcdo_logo)
+                c.drawImage(logo_img, W - M - 56, H - 70, 56, 40,
+                            preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        c.setFont('Helvetica', 9)
+        c.setFillColor(HexColor('#ccffcc'))
+        emp_label = "Staff Member" if hide_employee else cl.get('employee_name','')
+        info = f"Date: {cl.get('date','')}  |  Day: {cl.get('day','').capitalize()}  |  Completed by: {emp_label}"
+        c.drawString(M, H - 62, info)
+        done  = cl.get('done_tasks', 0)
+        total = cl.get('total_tasks', 0)
+        pct   = f"{done}/{total} tasks complete"
+        c.drawRightString(W - M, H - 46, pct)
+
+    def draw_footer():
+        c.setFillColor(HexColor('#f5f5f5'))
+        c.rect(0, 0, W, 36, fill=1, stroke=0)
+        c.setFont('Helvetica', 9)
+        c.setFillColor(GREEN)
+        c.drawCentredString(W/2, 14, 'Ridgeline Services  ·  0458 749 281  ·  Tick each item on completion')
+
+    def new_page():
+        draw_footer()
+        c.showPage()
+        draw_header_bar()
+        return H - 90
+
+    def chk(x, y, done):
+        size = 9
+        if done:
+            c.setFillColor(DKGRN); c.setStrokeColor(DKGRN)
+            c.rect(x, y - 1, size, size, fill=1, stroke=0)
+            c.setStrokeColor(HexColor('#ffffff')); c.setLineWidth(1.3)
+            c.line(x+1, y+3, x+3.5, y+6)
+            c.line(x+3.5, y+6, x+8, y-1)
+        else:
+            c.setFillColor(HexColor('#ffffff')); c.setStrokeColor(LGREY)
+            c.setLineWidth(0.8)
+            c.rect(x, y - 1, size, size, fill=1, stroke=1)
+
+    draw_header_bar()
+    y = H - 90
+
+    # Daily sections
+    for section_name, tasks in cl.get('daily_items', {}).items():
+        if y < 100:
+            y = new_page()
+        # Section header
+        c.setFillColor(GREEN)
+        c.rect(M, y - 3, W - 2*M, 15, fill=1, stroke=0)
+        c.setFont('Helvetica-Bold', 8)
+        c.setFillColor(HexColor('#ffffff'))
+        c.drawString(M + 4, y, section_name.upper())
+        y -= 19
+
+        for task, done in tasks.items():
+            if y < 55:
+                y = new_page()
+            chk(M + 2, y, done)
+            c.setFont('Helvetica', 9)
+            c.setFillColor(DARK)
+            c.drawString(M + 16, y, task)
+            y -= 13
+            c.setStrokeColor(HexColor('#eeeeee')); c.setLineWidth(0.3)
+            c.line(M, y + 5, W - M, y + 5)
+        y -= 4
+
+    # Weekly items
+    weekly = cl.get('weekly_items', {})
+    if weekly:
+        if y < 80:
+            y = new_page()
+        y -= 4
+        c.setFillColor(BLUE)
+        c.rect(M, y - 3, W - 2*M, 15, fill=1, stroke=0)
+        c.setFont('Helvetica-Bold', 8)
+        c.setFillColor(HexColor('#ffffff'))
+        c.drawString(M + 4, y, f"WEEKLY ITEMS — {cl.get('day','').upper()}")
+        y -= 19
+
+        for task, done in weekly.items():
+            if y < 55:
+                y = new_page()
+            chk(M + 2, y, done)
+            c.setFont('Helvetica', 9)
+            c.setFillColor(DARK)
+            c.drawString(M + 16, y, task)
+            y -= 13
+            c.setStrokeColor(HexColor('#eeeeee')); c.setLineWidth(0.3)
+            c.line(M, y + 5, W - M, y + 5)
+
+    # Proof photos (client PDF only)
+    if include_photos:
+        proof_photos = cl.get('proof_photos', {})
+        proof_dir = os.path.join(PHOTOS_DIR, 'proofs')
+        if proof_photos:
+            if y < 80:
+                y = new_page()
+            y -= 6
+            c.setFillColor(HexColor('#4a148c'))
+            c.rect(M, y - 3, W - 2*M, 15, fill=1, stroke=0)
+            c.setFont('Helvetica-Bold', 8)
+            c.setFillColor(HexColor('#ffffff'))
+            c.drawString(M + 4, y, 'PROOF PHOTOS')
+            y -= 20
+
+            photo_w = (W - 2*M - 20) / 2
+            photo_h = photo_w * 0.65
+            col = 0
+            x_positions = [M, M + photo_w + 20]
+            # Build label map from templates
+            has_kitchen = CHECKLIST_TEMPLATES.get(cl.get('site_id',''), {}).get('has_kitchen', False)
+            proof_defs  = PROOF_PHOTOS_KITCHEN if has_kitchen else PROOF_PHOTOS_STANDARD
+            label_map   = {p['key']: p['label'] for p in proof_defs}
+
+            for key, fn in proof_photos.items():
+                img_path = os.path.join(proof_dir, fn)
+                if not os.path.exists(img_path):
+                    continue
+                if y - photo_h < 55:
+                    y = new_page()
+                px = x_positions[col]
+                try:
+                    img_obj = ImageReader(img_path)
+                    c.setFillColor(HexColor('#f5f5f5'))
+                    c.rect(px, y - photo_h, photo_w, photo_h, fill=1, stroke=0)
+                    c.drawImage(img_obj, px, y - photo_h, photo_w, photo_h,
+                                preserveAspectRatio=True, mask='auto')
+                except Exception:
+                    c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                    c.rect(px, y - photo_h, photo_w, photo_h, fill=0, stroke=1)
+                lbl = label_map.get(key, key.replace('_',' ').title())
+                c.setFont('Helvetica-Bold', 8)
+                c.setFillColor(DARK)
+                c.drawString(px, y - photo_h - 10, lbl)
+                col += 1
+                if col >= 2:
+                    col = 0
+                    y -= photo_h + 22
+            if col == 1:
+                y -= photo_h + 22
+            y -= 6
+
+    # Manager sign-off block
+    if y < 140:
+        y = new_page()
+    y -= 10
+
+    # Sign-off header
+    c.setFillColor(HexColor('#1a237e'))
+    c.rect(M, y - 3, W - 2*M, 15, fill=1, stroke=0)
+    c.setFont('Helvetica-Bold', 8)
+    c.setFillColor(HexColor('#ffffff'))
+    c.drawString(M + 4, y, 'MANAGER SIGN-OFF')
+    y -= 22
+
+    manager_name = cl.get('manager_name', '')
+    sig_b64      = cl.get('manager_signature', '')
+
+    # Manager name line
+    c.setStrokeColor(HexColor('#cccccc')); c.setLineWidth(0.5)
+    c.line(M, y, M + 240, y)
+    c.setFont('Helvetica', 9); c.setFillColor(GREY)
+    c.drawString(M, y - 12, f"Manager Name: {manager_name}" if manager_name else "Manager Name: ___________________________")
+    submitted = cl.get('submitted_at','')[:19].replace('T',' ')
+    c.setFont('Helvetica', 8)
+    c.drawRightString(W - M, y - 12, f"Signed: {submitted}" if manager_name else '')
+    y -= 28
+
+    # Signature image or blank box
+    sig_box_w = 220; sig_box_h = 70
+    if sig_b64 and REPORTLAB:
+        try:
+            raw = sig_b64.split(',')[1] if ',' in sig_b64 else sig_b64
+            sig_bytes = _b64.b64decode(raw)
+            sig_buf   = io.BytesIO(sig_bytes)
+            sig_img   = ImageReader(sig_buf)
+            # White background box
+            c.setFillColor(HexColor('#ffffff'))
+            c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=1, stroke=0)
+            c.drawImage(sig_img, M, y - sig_box_h, sig_box_w, sig_box_h,
+                        mask='auto', preserveAspectRatio=True)
+        except Exception:
+            c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+            c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=0, stroke=1)
+    else:
+        c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+        c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=0, stroke=1)
+    c.setFont('Helvetica', 8); c.setFillColor(GREY)
+    c.drawString(M, y - sig_box_h - 10, "Signature")
+    y -= sig_box_h + 20
+
+    # Legacy plain signature line (kept for spacing / manager reference)
+    if y < 50:
+        y = new_page()
+    c.setFont('Helvetica', 8); c.setFillColor(GREY)
+    c.drawRightString(W - M, y, f"Submitted: {submitted}")
+
+    draw_footer()
+    c.save()
+    buf.seek(0)
+    return buf
+
+@app.route('/api/checklist/<cid>/pdf')
+@login_required
+def api_checklist_pdf(cid):
+    cls = load_json(CHECKLISTS_FILE)
+    cl  = next((x for x in cls if x['id'] == cid), None)
+    if not cl: return ('Not found', 404)
+    buf = _build_checklist_pdf(cl)
+    fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
+    return Response(buf, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'inline; filename={fn}'})
+
+# ── Client auth ───────────────────────────────────────────────────────────────
+@app.route('/client/login', methods=['GET','POST'])
+def client_login():
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username','').strip().lower()
+        password = request.form.get('password','')
+        clients  = load_json(CLIENTS_FILE)
+        client   = next((c for c in clients
+                         if c.get('username','').lower() == username
+                         and c.get('password','') == password
+                         and c.get('active', True)), None)
+        if client:
+            session.permanent = True
+            session['client_id']    = client['id']
+            session['client_name']  = client['name']
+            session['client_sites'] = client.get('sites', [])
+            return redirect(url_for('client_dashboard'))
+        error = 'Invalid username or password'
+    return render_template('client_login.html', error=error)
+
+@app.route('/client/logout')
+def client_logout():
+    session.pop('client_id', None)
+    session.pop('client_name', None)
+    session.pop('client_sites', None)
+    return redirect(url_for('client_login'))
+
+@app.route('/client')
+@client_required
+def client_dashboard():
+    return render_template('client.html')
+
+# ── Client stats API ──────────────────────────────────────────────────────────
+@app.route('/api/client/stats')
+@client_required
+def api_client_stats():
+    from datetime import timedelta
+    today      = datetime.now()
+    week_start = today - timedelta(days=today.weekday())
+    week_end   = week_start + timedelta(days=6)
+    ws = week_start.strftime('%Y-%m-%d')
+    we = week_end.strftime('%Y-%m-%d')
+
+    client_sites = session.get('client_sites', [])
+    cls = load_json(CHECKLISTS_FILE)
+    if client_sites:
+        cls = [c for c in cls if c.get('site_id') in client_sites]
+
+    week_cls = [c for c in cls if ws <= c.get('date','') <= we]
+    pcts     = [c['done_tasks'] / c['total_tasks'] * 100
+                for c in week_cls if c.get('total_tasks', 0) > 0]
+    weekly_pct   = round(sum(pcts) / len(pcts)) if pcts else 0
+    weekly_count = len(week_cls)
+
+    all_sites     = [(sid, t) for sid, t in CHECKLIST_TEMPLATES.items()
+                     if not client_sites or sid in client_sites]
+    total_sites   = len(all_sites)
+    kitchen_sites = sum(1 for _, t in all_sites if t.get('has_kitchen', False))
+    regular_sites = total_sites - kitchen_sites
+
+    return jsonify({
+        'weekly_count':  weekly_count,
+        'weekly_pct':    weekly_pct,
+        'total_sites':   total_sites,
+        'regular_sites': regular_sites,
+        'kitchen_sites': kitchen_sites,
+        'week_start':    ws,
+        'week_end':      we,
+    })
+
+# ── Client checklists API (no employee names) ─────────────────────────────────
+@app.route('/api/client/checklists')
+@client_required
+def api_client_checklists():
+    client_sites = session.get('client_sites', [])
+    cls = load_json(CHECKLISTS_FILE)
+    if client_sites:
+        cls = [c for c in cls if c.get('site_id') in client_sites]
+
+    site  = request.args.get('site')
+    date  = request.args.get('date')
+    month = request.args.get('month')
+    if site:  cls = [c for c in cls if c.get('site_id') == site]
+    if date:  cls = [c for c in cls if c.get('date') == date]
+    if month: cls = [c for c in cls if c.get('date','').startswith(month)]
+
+    return jsonify([{
+        'id':           c['id'],
+        'site_id':      c.get('site_id',''),
+        'site_name':    c.get('site_name',''),
+        'date':         c.get('date',''),
+        'day':          c.get('day',''),
+        'submitted_at': c.get('submitted_at',''),
+        'done_tasks':   c.get('done_tasks', 0),
+        'total_tasks':  c.get('total_tasks', 0),
+        'manager_name': c.get('manager_name',''),
+        'proof_photos': c.get('proof_photos', {}),
+    } for c in cls])
+
+# ── Client PDF (anonymous + photos) ──────────────────────────────────────────
+@app.route('/api/client/checklist/<cid>/pdf')
+@client_required
+def api_client_checklist_pdf(cid):
+    client_sites = session.get('client_sites', [])
+    cls = load_json(CHECKLISTS_FILE)
+    cl  = next((x for x in cls if x['id'] == cid), None)
+    if not cl: return ('Not found', 404)
+    if client_sites and cl.get('site_id') not in client_sites:
+        return ('Forbidden', 403)
+    buf = _build_checklist_pdf(cl, hide_employee=True, include_photos=True)
+    fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
+    return Response(buf, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'inline; filename={fn}'})
+
+# ── Client proof photo serve ──────────────────────────────────────────────────
+@app.route('/client-proof-photos/<filename>')
+@client_required
+def client_proof_photo_serve(filename):
+    return send_from_directory(os.path.join(PHOTOS_DIR, 'proofs'), filename)
+
+# ── Admin: manage client accounts ─────────────────────────────────────────────
+@app.route('/clients')
+@login_required
+def clients_page():
+    return render_template('clients.html')
+
+@app.route('/api/clients', methods=['GET'])
+@login_required
+def api_get_clients():
+    return jsonify(load_json(CLIENTS_FILE))
+
+@app.route('/api/clients', methods=['POST'])
+@login_required
+def api_create_client():
+    ensure_dirs()
+    data   = request.get_json()
+    clients = load_json(CLIENTS_FILE)
+    client = {
+        'id':         str(uuid.uuid4()),
+        'name':       data.get('name','').strip(),
+        'username':   data.get('username','').strip().lower(),
+        'password':   data.get('password','').strip(),
+        'sites':      data.get('sites', []),
+        'active':     True,
+        'created_at': datetime.now().isoformat(),
+    }
+    clients.append(client)
+    save_json(CLIENTS_FILE, clients)
+    return jsonify(client), 201
+
+@app.route('/api/clients/<cid>', methods=['PUT'])
+@login_required
+def api_update_client(cid):
+    clients = load_json(CLIENTS_FILE)
+    idx     = next((i for i,c in enumerate(clients) if c['id']==cid), None)
+    if idx is None: return ('Not found', 404)
+    clients[idx].update(request.get_json())
+    save_json(CLIENTS_FILE, clients)
+    return jsonify(clients[idx])
+
+@app.route('/api/clients/<cid>', methods=['DELETE'])
+@login_required
+def api_delete_client(cid):
+    clients = [c for c in load_json(CLIENTS_FILE) if c['id'] != cid]
+    save_json(CLIENTS_FILE, clients)
+    return jsonify({'ok': True})
+
+# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     ensure_dirs()
     app.run(debug=True, port=5003)

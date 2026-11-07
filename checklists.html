@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ridgeline">
+<title>Ridgeline — Checklists</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;}
+.topbar{background:#111;border-bottom:1px solid #222;padding:0 18px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.topbar img{height:30px;object-fit:contain;}
+.topbar-name{font-size:16px;font-weight:900;color:#3d8b3d;flex:1;}
+.btn-back{font-size:12px;color:#666;text-decoration:none;}
+.btn-back:hover{color:#aaa;}
+
+.wrap{max-width:700px;margin:0 auto;padding:20px 16px 40px;}
+
+.page-title{font-size:22px;font-weight:900;margin-bottom:4px;}
+.page-sub{font-size:13px;color:#666;margin-bottom:20px;}
+
+.action-row{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
+.btn-emp{background:#1a1a1a;border:1px solid #3d8b3d;color:#3d8b3d;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;}
+.btn-emp:hover{background:#1f2e1f;}
+.btn-checklist{background:#3d8b3d;border:none;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;}
+.btn-checklist:hover{background:#2d6b2d;}
+
+/* Filters */
+.filters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;}
+@media(max-width:480px){.filters{grid-template-columns:1fr 1fr;}}
+.filter-select,.filter-input{background:#1a1a1a;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:10px 12px;border-radius:10px;width:100%;outline:none;appearance:none;}
+.filter-select:focus,.filter-input:focus{border-color:#3d8b3d;}
+
+/* Summary cards */
+.summary-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;}
+.sum-card{background:#1a1a1a;border:1px solid #222;border-radius:12px;padding:14px 10px;text-align:center;}
+.sum-val{font-size:22px;font-weight:900;color:#3d8b3d;}
+.sum-lbl{font-size:11px;color:#666;margin-top:2px;}
+
+/* Checklist cards */
+.cl-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:12px;cursor:pointer;transition:border-color .2s;}
+.cl-card:hover{border-color:#3d8b3d;}
+.cl-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.cl-site{font-size:16px;font-weight:700;color:#f0f0f0;}
+.cl-date{font-size:12px;color:#666;margin-top:2px;}
+.cl-badge{padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap;}
+.badge-green{background:#1f3a1f;color:#4caf50;border:1px solid #2e5e2e;}
+.badge-orange{background:#3a2a0f;color:#ff9800;border:1px solid #5e3a0e;}
+
+.cl-card-mid{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.cl-emp{font-size:13px;color:#aaa;}
+.cl-pct{font-size:14px;font-weight:700;color:#3d8b3d;}
+
+.cl-progress{background:#242424;border-radius:99px;height:5px;overflow:hidden;margin-bottom:10px;}
+.cl-progress-fill{background:#3d8b3d;height:5px;border-radius:99px;}
+
+.cl-actions{display:flex;gap:8px;}
+.btn-view{flex:1;background:#111;border:1px solid #333;color:#ccc;padding:9px 0;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;}
+.btn-view:hover{border-color:#3d8b3d;color:#3d8b3d;}
+.btn-pdf2{flex:1;background:#3d8b3d;border:none;color:#fff;padding:9px 0;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;display:block;}
+.btn-pdf2:hover{background:#2d6b2d;}
+
+/* Detail modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;overflow-y:auto;}
+.modal-bg.open{display:flex;align-items:flex-start;justify-content:center;padding:20px 12px 40px;}
+.modal{background:#111;border:1px solid #2a2a2a;border-radius:20px;width:100%;max-width:600px;padding:24px;}
+.modal-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
+.modal-title{font-size:18px;font-weight:900;color:#3d8b3d;}
+.modal-close{background:none;border:none;color:#666;font-size:22px;cursor:pointer;padding:0;}
+.modal-close:hover{color:#aaa;}
+.modal-meta{font-size:13px;color:#888;margin-bottom:16px;}
+
+.detail-section{margin-bottom:12px;}
+.detail-sec-header{background:#1f2e1f;padding:8px 12px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;color:#4caf50;letter-spacing:.5px;}
+.detail-sec-header.weekly{background:#1a2540;color:#64b5f6;}
+.detail-tasks{background:#1a1a1a;border:1px solid #242424;border-radius:0 0 8px 8px;border-top:none;}
+.detail-task{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #202020;font-size:13px;}
+.detail-task:last-child{border-bottom:none;}
+.detail-task.done{color:#4caf50;}
+.detail-task.miss{color:#666;}
+.chk-icon{font-size:14px;flex-shrink:0;}
+
+.empty{text-align:center;padding:60px 20px;color:#444;}
+.empty-icon{font-size:40px;margin-bottom:12px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="topbar-name">Checklists</div>
+  <a href="/home" class="btn-back">← Home</a>
+</div>
+
+<div class="wrap">
+  <div class="page-title">🧹 Cleaning Checklists</div>
+  <div class="page-sub">View and manage submitted cleaning checklists</div>
+
+  <div class="action-row">
+    <a href="/employees" class="btn-emp">👥 Manage Employees</a>
+    <a href="/checklist" class="btn-checklist">🧹 Start Checklist</a>
+  </div>
+
+  <div class="summary-row">
+    <div class="sum-card"><div class="sum-val" id="sumTotal">—</div><div class="sum-lbl">Total Submitted</div></div>
+    <div class="sum-card"><div class="sum-val" id="sumToday">—</div><div class="sum-lbl">Today</div></div>
+    <div class="sum-card"><div class="sum-val" id="sumAvg">—</div><div class="sum-lbl">Avg Completion</div></div>
+  </div>
+
+  <div class="filters">
+    <select class="filter-select" id="filterSite" onchange="loadChecklists()">
+      <option value="">All Sites</option>
+      <option value="cambridge">Cambridge Gardens</option>
+      <option value="blaxland">Blaxland</option>
+    </select>
+    <input type="date" class="filter-input" id="filterDate" onchange="loadChecklists()">
+    <input type="text" class="filter-input" id="filterEmp" placeholder="Employee name…" oninput="loadChecklists()">
+  </div>
+
+  <div id="listWrap"></div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-bg" id="detailModal" onclick="closeModal(event)">
+  <div class="modal" id="detailContent" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="detailTitle">—</div>
+        <div class="modal-meta" id="detailMeta">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<script>
+let allChecklists = [];
+
+async function loadChecklists() {
+  const site = document.getElementById('filterSite').value;
+  const date = document.getElementById('filterDate').value;
+  const emp  = document.getElementById('filterEmp').value;
+
+  let url = '/api/checklist?';
+  if (site) url += `site=${site}&`;
+  if (date) url += `date=${date}&`;
+  if (emp)  url += `employee=${encodeURIComponent(emp)}&`;
+
+  try {
+    const r = await fetch(url);
+    allChecklists = await r.json();
+    renderList();
+    renderSummary();
+  } catch(e) {
+    document.getElementById('listWrap').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div>Error loading checklists</div>';
+  }
+}
+
+function renderSummary() {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('sumTotal').textContent = allChecklists.length;
+  document.getElementById('sumToday').textContent = allChecklists.filter(c => c.date === today).length;
+  const avgs = allChecklists.filter(c => c.total_tasks > 0).map(c => c.done_tasks / c.total_tasks * 100);
+  const avg = avgs.length > 0 ? Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length) : 0;
+  document.getElementById('sumAvg').textContent = avg + '%';
+}
+
+function renderList() {
+  const wrap = document.getElementById('listWrap');
+  if (allChecklists.length === 0) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>No checklists found.<br>Employees submit them from the Checklist page.</div>';
+    return;
+  }
+
+  wrap.innerHTML = allChecklists.map(cl => {
+    const pct = cl.total_tasks > 0 ? Math.round(cl.done_tasks / cl.total_tasks * 100) : 0;
+    const badgeCls = pct >= 80 ? 'badge-green' : 'badge-orange';
+    const dateDisp = new Date(cl.date + 'T12:00:00').toLocaleDateString('en-AU', {weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    const timeDisp = cl.submitted_at ? cl.submitted_at.slice(11,16) : '';
+    return `
+    <div class="cl-card">
+      <div class="cl-card-top">
+        <div>
+          <div class="cl-site">${cl.site_name || cl.site_id}</div>
+          <div class="cl-date">${dateDisp} · Submitted ${timeDisp}</div>
+        </div>
+        <div class="cl-badge ${badgeCls}">${pct}%</div>
+      </div>
+      <div class="cl-card-mid">
+        <div class="cl-emp">👤 ${cl.employee_name}</div>
+        <div class="cl-pct">${cl.done_tasks}/${cl.total_tasks} tasks</div>
+      </div>
+      <div class="cl-progress"><div class="cl-progress-fill" style="width:${pct}%"></div></div>
+      <div class="cl-actions">
+        <button class="btn-view" onclick="viewDetail('${cl.id}')">🔍 View Details</button>
+        <a class="btn-pdf2" href="/api/checklist/${cl.id}/pdf" target="_blank">📄 PDF</a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function viewDetail(id) {
+  const cl = allChecklists.find(c => c.id === id);
+  if (!cl) return;
+
+  const pct = cl.total_tasks > 0 ? Math.round(cl.done_tasks / cl.total_tasks * 100) : 0;
+  const dateDisp = new Date(cl.date + 'T12:00:00').toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('detailTitle').textContent = cl.site_name || cl.site_id;
+  document.getElementById('detailMeta').textContent = `${dateDisp} · ${cl.employee_name} · ${cl.done_tasks}/${cl.total_tasks} tasks (${pct}%)`;
+
+  let html = '';
+
+  // Daily items
+  for (const [section, tasks] of Object.entries(cl.daily_items || {})) {
+    html += `<div class="detail-section">
+      <div class="detail-sec-header">${section.toUpperCase()}</div>
+      <div class="detail-tasks">`;
+    for (const [task, done] of Object.entries(tasks)) {
+      html += `<div class="detail-task ${done ? 'done' : 'miss'}">
+        <span class="chk-icon">${done ? '✅' : '☐'}</span>${task}</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Weekly items
+  const weekly = cl.weekly_items || {};
+  if (Object.keys(weekly).length > 0) {
+    html += `<div class="detail-section">
+      <div class="detail-sec-header weekly">WEEKLY ITEMS — ${(cl.day||'').toUpperCase()}</div>
+      <div class="detail-tasks">`;
+    for (const [task, done] of Object.entries(weekly)) {
+      html += `<div class="detail-task ${done ? 'done' : 'miss'}">
+        <span class="chk-icon">${done ? '✅' : '☐'}</span>${task}</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  if (cl.notes) {
+    html += `<div style="margin-top:12px;padding:12px;background:#1a1a1a;border-radius:10px;font-size:13px;color:#aaa;"><strong>Notes:</strong> ${cl.notes}</div>`;
+  }
+
+  // Manager sign-off
+  const mgr = cl.manager_name || '';
+  const sig = cl.manager_signature || '';
+  html += `<div style="margin-top:16px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;">
+    <div style="background:#1a237e;padding:10px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:.5px;">🖊 MANAGER SIGN-OFF</div>
+    <div style="padding:14px;">
+      <div style="font-size:12px;color:#888;margin-bottom:4px;">Manager</div>
+      <div style="font-size:15px;font-weight:700;color:#f0f0f0;margin-bottom:12px;">${mgr || '<span style="color:#555">Not signed</span>'}</div>
+      ${sig ? `<div style="font-size:12px;color:#888;margin-bottom:6px;">Signature</div>
+               <img src="${sig}" style="background:#fff;border-radius:8px;max-width:260px;width:100%;height:auto;display:block;" alt="Signature">` : ''}
+    </div>
+  </div>`;
+
+  document.getElementById('detailBody').innerHTML = html;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target.id === 'detailModal') {
+    document.getElementById('detailModal').classList.remove('open');
+  }
+}
+
+// Set default filter date to today
+document.getElementById('filterDate').value = new Date().toISOString().slice(0,10);
+loadChecklists();
+</script>
+</body>
+</html>

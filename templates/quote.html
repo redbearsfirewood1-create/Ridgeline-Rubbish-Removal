@@ -390,7 +390,7 @@ function sendSMS() {
   const itemLines = rows.map(r => `• ${r.label}: $${r.amount.toFixed(2)}`).join('\n');
 
   const body = encodeURIComponent(
-    `Hi ${name||'there'}, here is your Ridgeline Rubbish Removal quote:\n\n` +
+    `Hi ${name||'there'}, here is your Ridgeline Services quote:\n\n` +
     (addr ? `Pickup: ${addr}\n\n` : '') +
     `${itemLines}\n\nTOTAL: $${total.toFixed(2)}\n\nTo confirm, reply YES or call us.`
   );

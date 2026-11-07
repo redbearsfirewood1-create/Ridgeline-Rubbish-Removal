@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ridgeline-rubbish-removal
+    name: ridgeline-services
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app

@@ -1,4 +1,4 @@
-# Ridgeline Rubbish Removal — Deploy Guide
+# Ridgeline Services — Deploy Guide
 
 ## Before You Start
 
@@ -14,7 +14,7 @@ You'll need:
 Copy your logo file into the static folder and rename it:
 
 ```
-Ridgeline Rubbish Removal\static\logo.png
+Ridgeline Services\static\logo.png
 ```
 
 ---
@@ -22,8 +22,8 @@ Ridgeline Rubbish Removal\static\logo.png
 ## Step 2 — Push to GitHub
 
 1. Open GitHub Desktop (or GitHub.com)
-2. Create a new repository called `ridgeline-rubbish-removal`
-3. Add the entire `Ridgeline Rubbish Removal` folder as the repository root
+2. Create a new repository called `ridgeline-services`
+3. Add the entire `Ridgeline Services` folder as the repository root
 4. Commit all files and push to GitHub
 
 Your repo should contain:
@@ -48,7 +48,7 @@ static/
 
 1. Go to [render.com](https://render.com) and log in
 2. Click **New → Web Service**
-3. Connect your GitHub repo `ridgeline-rubbish-removal`
+3. Connect your GitHub repo `ridgeline-services`
 4. Render will auto-detect the `render.yaml` — click **Apply**
 5. Wait for the build to complete (2–3 minutes)
 
@@ -87,7 +87,7 @@ Click **Save** — Render will redeploy automatically.
 
 ## Step 6 — Log In
 
-Your app is live at the URL Render provides (e.g. `https://ridgeline-rubbish-removal.onrender.com`).
+Your app is live at the URL Render provides (e.g. `https://ridgeline-services.onrender.com`).
 
 Default login:
 - **Username:** `admin`
