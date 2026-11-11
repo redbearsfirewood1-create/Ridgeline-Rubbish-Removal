@@ -48,28 +48,35 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .emp-info strong{font-size:15px;display:block;}
 .emp-info span{font-size:12px;color:#666;}
 
-/* Week row */
+/* Week schedule */
 .week-title{font-size:14px;font-weight:700;color:#888;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;}
-.week-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:24px;scrollbar-width:none;}
-.week-row::-webkit-scrollbar{display:none;}
-.week-day{flex-shrink:0;width:52px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:10px 4px;text-align:center;}
-.week-day.today{border-color:#3d8b3d;background:#1f2e1f;}
-.week-day-label{font-size:11px;color:#666;font-weight:700;text-transform:uppercase;margin-bottom:6px;}
-.week-day.today .week-day-label{color:#3d8b3d;}
-.week-site-dot{width:28px;height:28px;border-radius:8px;background:#2a2a2a;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:14px;}
-.week-site-dot.active{background:#1f2e1f;border:1px solid #3d8b3d;}
-.week-day.off{opacity:.4;}
+.week-schedule{display:flex;flex-direction:column;gap:6px;margin-bottom:24px;}
+.week-row-item{display:flex;align-items:stretch;gap:0;background:#151515;border:1px solid #222;border-radius:12px;overflow:hidden;}
+.week-row-item.today{border-color:#3d8b3d;}
+.week-row-item.off{opacity:.38;}
+.week-day-pill{flex-shrink:0;width:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;background:#1a1a1a;border-right:1px solid #222;}
+.week-row-item.today .week-day-pill{background:#1f2e1f;border-color:#3d8b3d;}
+.week-day-pill .wdl{font-size:11px;font-weight:800;text-transform:uppercase;color:#555;}
+.week-row-item.today .week-day-pill .wdl{color:#3d8b3d;}
+.week-sites-list{flex:1;display:flex;flex-direction:column;justify-content:center;padding:8px 12px;gap:4px;}
+.week-site-entry{display:flex;flex-direction:column;gap:1px;}
+.week-site-name{font-size:13px;font-weight:700;color:#e0e0e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.week-site-addr{font-size:11px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.week-site-time{font-size:11px;color:#3d8b3d;font-weight:600;}
+.week-off-label{font-size:12px;color:#333;padding:10px 12px;align-self:center;}
 
 /* Today bubbles */
 .today-title{font-size:18px;font-weight:900;margin-bottom:6px;}
 .today-sub{font-size:13px;color:#666;margin-bottom:16px;}
 .site-bubbles{display:flex;flex-direction:column;gap:12px;}
-.site-bubble{background:#1a1a1a;border:2px solid #2a2a2a;border-radius:18px;padding:20px 20px;display:flex;align-items:center;gap:16px;cursor:pointer;transition:border-color .2s,background .2s;-webkit-tap-highlight-color:transparent;}
+.site-bubble{background:#1a1a1a;border:2px solid #2a2a2a;border-radius:18px;padding:16px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .2s,background .2s;-webkit-tap-highlight-color:transparent;}
 .site-bubble:active,.site-bubble:hover{border-color:#3d8b3d;background:#1f2e1f;}
-.site-bubble-icon{font-size:36px;flex-shrink:0;}
-.site-bubble-name{font-size:18px;font-weight:700;color:#f0f0f0;}
-.site-bubble-sub{font-size:13px;color:#666;margin-top:3px;}
-.site-bubble-arrow{margin-left:auto;color:#3d8b3d;font-size:22px;flex-shrink:0;}
+.site-bubble-icon{font-size:32px;flex-shrink:0;}
+.site-bubble-body{flex:1;min-width:0;}
+.site-bubble-name{font-size:17px;font-weight:700;color:#f0f0f0;}
+.site-bubble-addr{font-size:12px;color:#666;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.site-bubble-time{display:inline-block;margin-top:5px;font-size:12px;font-weight:700;color:#3d8b3d;background:#1a2e1a;border:1px solid #2d5c2d;border-radius:6px;padding:2px 8px;}
+.site-bubble-arrow{flex-shrink:0;color:#3d8b3d;font-size:22px;}
 .no-sites{text-align:center;padding:40px 20px;color:#444;}
 .no-sites-icon{font-size:40px;margin-bottom:12px;}
 
@@ -317,7 +324,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
     </div>
 
     <div class="week-title">This Week</div>
-    <div class="week-row" id="weekRow"></div>
+    <div class="week-schedule" id="weekRow"></div>
 
     <div class="today-title">Today's Sites</div>
     <div class="today-sub" id="todaySub">Select a site to begin your checklist</div>
@@ -426,6 +433,7 @@ const DAY_FULL = {mon:'Monday',tue:'Tuesday',wed:'Wednesday',thu:'Thursday',fri:
 let pin = '';
 let currentEmployee = null;
 let currentSite = null;
+let currentSiteData = null;  // full site object {id,name,address,start_time,...}
 let currentTemplate = null;
 let currentArrivalId = null;
 let submittedClId = null;
@@ -434,6 +442,7 @@ let taskState = {};
 let weeklyState = {};
 let proofUploaded = {};
 let siteClientMap = {}; // site_id → {client_name, logo_url}
+let todaySitesData = []; // cached today's sites from API
 
 // ── Session from Flask — tojson ensures safe JS strings (quotes, apostrophes etc) ──
 const FLASK_EMP_ID   = {{ session_emp_id   | tojson }};
@@ -520,28 +529,38 @@ async function loadSites() {
     const [weekR, todayR] = await Promise.all([
       fetch('/api/sites/week'), fetch('/api/sites/today')
     ]);
-    const weekData  = await weekR.json();
+    if (!weekR.ok || !todayR.ok) throw new Error('API error');
+    const weekData   = await weekR.json();
     const todaySites = await todayR.json();
+    todaySitesData   = todaySites; // cache for startSite lookup
     renderWeekRow(weekData);
     renderTodaySites(todaySites);
   } catch(e) {
     document.getElementById('siteBubbles').innerHTML =
-      '<div class="no-sites"><div class="no-sites-icon">⚠️</div>Error loading sites</div>';
+      '<div class="no-sites"><div class="no-sites-icon">⚠️</div>Error loading sites — please refresh</div>';
   }
 }
 
 function renderWeekRow(weekData) {
   const row = document.getElementById('weekRow');
   row.innerHTML = DAY_NAMES.map(day => {
-    const sites = weekData[day] || [];
+    const sites   = weekData[day] || [];
     const isToday = day === TODAY_DAY;
-    const dots = sites.length > 0
-      ? sites.map(s=>`<div class="week-site-dot active" title="${s.name}">🍔</div>`).join('')
-      : `<div class="week-site-dot" style="color:#333;font-size:10px;">—</div>`;
-    return `<div class="week-day ${isToday?'today':''}${!sites.length?' off':''}">
-      <div class="week-day-label">${DAY_LABELS[day]}</div>
-      ${dots}
-    </div>`;
+    const sitesHtml = sites.length
+      ? sites.map(s => `
+          <div class="week-site-entry">
+            <div class="week-site-name">${s.name}</div>
+            ${s.address   ? `<div class="week-site-addr">📍 ${s.address}</div>` : ''}
+            ${s.start_time? `<div class="week-site-time">⏰ ${s.start_time}</div>` : ''}
+          </div>`).join('')
+      : '';
+    return `
+      <div class="week-row-item ${isToday?'today':''}${!sites.length?' off':''}">
+        <div class="week-day-pill"><span class="wdl">${DAY_LABELS[day]}</span></div>
+        ${sites.length
+          ? `<div class="week-sites-list">${sitesHtml}</div>`
+          : `<div class="week-off-label">Day off</div>`}
+      </div>`;
   }).join('');
 }
 
@@ -553,25 +572,28 @@ function renderTodaySites(sites) {
     wrap.innerHTML='<div class="no-sites"><div class="no-sites-icon">🎉</div>No sites scheduled for today!</div>';
     return;
   }
-  wrap.innerHTML = sites.map(s => `
-    <div class="site-bubble" onclick="startSite('${s.id}')">
+  wrap.innerHTML = sites.map((s,i) => `
+    <div class="site-bubble" data-site-idx="${i}" onclick="startSite(${i})">
       <div class="site-bubble-icon">🍔</div>
-      <div>
+      <div class="site-bubble-body">
         <div class="site-bubble-name">${s.name}</div>
-        <div class="site-bubble-sub">${s.has_kitchen ? '🍳 Includes kitchen' : 'Standard restaurant'}</div>
+        ${s.address ? `<div class="site-bubble-addr">📍 ${s.address}</div>` : ''}
+        ${s.start_time ? `<span class="site-bubble-time">⏰ ${s.start_time}</span>` : ''}
       </div>
       <div class="site-bubble-arrow">›</div>
     </div>`).join('');
 }
 
 // ── Arrival ────────────────────────────────────────────────────────────────
-function startSite(siteId) {
-  currentSite = siteId;
-  const siteName = document.querySelector(`.site-bubble[onclick="startSite('${siteId}')"] .site-bubble-name`)?.textContent || siteId;
-  document.getElementById('arrivalSiteName').textContent = siteName;
+function startSite(idx) {
+  // Use index into cached array — no fragile DOM queries
+  const site = todaySitesData[idx];
+  if (!site) { alert('Site not found — please refresh'); return; }
+  currentSite     = site.id;
+  currentSiteData = site;
+  document.getElementById('arrivalSiteName').textContent = site.name;
 
-  // Show client logo if this site belongs to a client
-  const clientInfo = siteClientMap[siteId];
+  const clientInfo = siteClientMap[site.id];
   _showClientLogo(clientInfo);
 
   showPhase('phaseArrival');

@@ -1049,24 +1049,30 @@ def api_delete_site(site_id):
 
 @app.route('/api/sites/today')
 def api_sites_today():
-    day    = _today_day_abbr()
-    emp_id = session.get('employee_id')
+    day     = _today_day_abbr()
+    emp_id  = session.get('employee_id')
     all_cfg = load_all_site_configs()
-    result = []
+    result  = []
     for sid, t in get_templates().items():
         cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
         if not cfg.get('enabled', True): continue
         if day not in cfg.get('assigned_days', _DAY_NAMES): continue
         assigned = cfg.get('assigned_employees', [])
         if assigned and emp_id and emp_id not in assigned: continue
-        result.append({'id': sid, 'name': t['name'], 'has_kitchen': t.get('has_kitchen', False)})
+        result.append({
+            'id':          sid,
+            'name':        t['name'],
+            'has_kitchen': t.get('has_kitchen', False),
+            'address':     cfg.get('address', ''),
+            'start_time':  cfg.get('start_time', ''),
+        })
     return jsonify(result)
 
 @app.route('/api/sites/week')
 def api_sites_week():
     emp_id  = session.get('employee_id')
     all_cfg = load_all_site_configs()
-    week = {}
+    week    = {}
     for day in _DAY_NAMES:
         sites = []
         for sid, t in get_templates().items():
@@ -1075,7 +1081,12 @@ def api_sites_week():
             if day not in cfg.get('assigned_days', _DAY_NAMES): continue
             assigned = cfg.get('assigned_employees', [])
             if assigned and emp_id and emp_id not in assigned: continue
-            sites.append({'id': sid, 'name': t['name']})
+            sites.append({
+                'id':         sid,
+                'name':       t['name'],
+                'address':    cfg.get('address', ''),
+                'start_time': cfg.get('start_time', ''),
+            })
         week[day] = sites
     return jsonify(week)
 
