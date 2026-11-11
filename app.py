@@ -1,4 +1,4 @@
-import os, json, uuid, shutil, io, smtplib
+import os, json, uuid, shutil, io, smtplib, re
 from datetime import datetime
 from functools import wraps
 from email.mime.multipart import MIMEMultipart
@@ -39,6 +39,7 @@ TRUCKS_FILE      = os.path.join(DATA_DIR, 'trucks.json')
 EMPLOYEES_FILE   = os.path.join(DATA_DIR, 'employees.json')
 CHECKLISTS_FILE  = os.path.join(DATA_DIR, 'checklists.json')
 ALLOWED_EXT  = {'png','jpg','jpeg','gif','webp','heic'}
+EMP_PHOTOS_DIR = os.path.join(DATA_DIR, 'photos', 'emp_photos')
 
 # ── Item pricing ──────────────────────────────────────────────────────────────
 ITEM_PRICES = {
@@ -56,7 +57,7 @@ def collection_fee_for_km(km):
     return 50
 
 def ensure_dirs():
-    for d in (DATA_DIR, PHOTOS_DIR):
+    for d in (DATA_DIR, PHOTOS_DIR, CLIENT_LOGOS_DIR, EMP_PHOTOS_DIR):
         os.makedirs(d, exist_ok=True)
 
 def load_json(path):
@@ -640,9 +641,11 @@ _WINDOWS = {'name': 'Windows', 'tasks': [
     'Toy display glass cleaned',
 ]}
 
-SITES_FILE   = os.path.join(DATA_DIR, 'sites.json')
-ARRIVALS_FILE = os.path.join(DATA_DIR, 'arrivals.json')
-CLIENTS_FILE  = os.path.join(DATA_DIR, 'clients.json')
+SITES_FILE        = os.path.join(DATA_DIR, 'sites.json')
+ARRIVALS_FILE     = os.path.join(DATA_DIR, 'arrivals.json')
+CLIENTS_FILE      = os.path.join(DATA_DIR, 'clients.json')
+SITES_CONFIG_FILE = os.path.join(DATA_DIR, 'sites_config.json')
+CLIENT_LOGOS_DIR  = os.path.join(DATA_DIR, 'photos', 'client_logos')
 
 PROOF_PHOTOS_STANDARD = [
     {'key': 'dining_in',  'label': 'Dining Area Inside'},
@@ -654,7 +657,7 @@ PROOF_PHOTOS_KITCHEN = PROOF_PHOTOS_STANDARD + [
     {'key': 'equipment',  'label': 'Behind Equipment'},
 ]
 
-CHECKLIST_TEMPLATES = {
+_BASE_TEMPLATES = {
     'cambridge': {
         'name': "Cambridge Gardens McDonald's",
         'has_kitchen': True,
@@ -723,6 +726,35 @@ _DAY_NAMES = ['mon','tue','wed','thu','fri','sat','sun']  # weekday() 0=Mon…6=
 def _today_day_abbr():
     return _DAY_NAMES[datetime.now().weekday()]
 
+def get_templates():
+    """Return all site templates: hardcoded base sites + any user-added sites from sites_config.json."""
+    try:
+        with open(SITES_CONFIG_FILE) as f:
+            scfg = json.load(f)
+    except:
+        scfg = {}
+
+    result = {}
+    # Start with base templates, applying any stored name/kitchen overrides
+    for sid, t in _BASE_TEMPLATES.items():
+        result[sid] = dict(t)
+        if sid in scfg:
+            result[sid]['name']        = scfg[sid].get('name',       t['name'])
+            result[sid]['has_kitchen'] = scfg[sid].get('has_kitchen', t['has_kitchen'])
+
+    # Add user-created sites (inherit tasks from matching base template)
+    for sid, cfg in scfg.items():
+        if sid not in _BASE_TEMPLATES:
+            src = _BASE_TEMPLATES['cambridge'] if cfg.get('has_kitchen') else _BASE_TEMPLATES['blaxland']
+            result[sid] = {
+                'name':           cfg['name'],
+                'has_kitchen':    cfg.get('has_kitchen', False),
+                'daily_sections': src['daily_sections'],
+                'weekly_items':   src['weekly_items'],
+            }
+
+    return result
+
 # ── Employee auth ─────────────────────────────────────────────────────────────
 def employee_or_admin_required(f):
     @wraps(f)
@@ -738,6 +770,11 @@ def employee_or_admin_required(f):
 def employees_page():
     return render_template('employees.html')
 
+@app.route('/monitor')
+@login_required
+def monitor_page():
+    return render_template('monitor.html', google_maps_key=GOOGLE_MAPS)
+
 # ── Checklist routes ──────────────────────────────────────────────────────────
 @app.route('/checklist/login', methods=['GET','POST'])
 def checklist_login():
@@ -752,11 +789,11 @@ def checklist_login():
             session['employee_name'] = emp['name']
             return jsonify({'ok': True, 'name': emp['name']})
         return jsonify({'error': 'Wrong PIN'}), 401
-    return render_template('checklist.html', templates=CHECKLIST_TEMPLATES, today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+    return render_template('checklist.html', templates=get_templates(), today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
 
 @app.route('/checklist')
 def checklist_home():
-    return render_template('checklist.html', templates=CHECKLIST_TEMPLATES, today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+    return render_template('checklist.html', templates=get_templates(), today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
 
 @app.route('/checklist/logout')
 def checklist_logout():
@@ -788,6 +825,7 @@ def api_create_employee():
         'id':     str(uuid.uuid4()),
         'name':   data.get('name','').strip(),
         'pin':    data.get('pin','').strip(),
+        'mobile': data.get('mobile','').strip(),
         'active': True,
     }
     emps.append(emp)
@@ -800,7 +838,11 @@ def api_update_employee(eid):
     emps = load_json(EMPLOYEES_FILE)
     idx  = next((i for i,e in enumerate(emps) if e['id']==eid), None)
     if idx is None: return ('Not found', 404)
-    emps[idx].update(request.get_json())
+    data = request.get_json()
+    # Only update known fields to avoid overwriting photo accidentally
+    for key in ('name','pin','mobile','active'):
+        if key in data:
+            emps[idx][key] = data[key]
     save_json(EMPLOYEES_FILE, emps)
     return jsonify(emps[idx])
 
@@ -812,10 +854,31 @@ def api_delete_employee(eid):
     save_json(EMPLOYEES_FILE, emps)
     return jsonify({'ok': True})
 
+@app.route('/api/employees/<eid>/photo', methods=['POST'])
+@login_required
+def api_upload_emp_photo(eid):
+    ensure_dirs()
+    f = request.files.get('photo')
+    if not f or not allowed_file(f.filename):
+        return ('Bad file', 400)
+    ext = f.filename.rsplit('.',1)[1].lower()
+    fn  = f'emp_{eid}.{ext}'
+    f.save(os.path.join(EMP_PHOTOS_DIR, fn))
+    emps = load_json(EMPLOYEES_FILE)
+    idx  = next((i for i,e in enumerate(emps) if e['id']==eid), None)
+    if idx is not None:
+        emps[idx]['photo'] = fn
+        save_json(EMPLOYEES_FILE, emps)
+    return jsonify({'photo': fn})
+
+@app.route('/emp-photos/<filename>')
+def serve_emp_photo(filename):
+    return send_from_directory(EMP_PHOTOS_DIR, filename)
+
 # ── Checklist template API ────────────────────────────────────────────────────
 @app.route('/api/checklist/template/<site_id>')
 def api_checklist_template(site_id):
-    t = CHECKLIST_TEMPLATES.get(site_id)
+    t = get_templates().get(site_id)
     if not t: return ('Not found', 404)
     day = request.args.get('day', _today_day_abbr())
     weekly_today = [w['task'] for w in t['weekly_items'] if day in w['days']]
@@ -851,19 +914,80 @@ def site_config(site_id):
 @login_required
 def api_get_sites():
     all_cfg = load_all_site_configs()
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
     result = []
-    for sid, t in CHECKLIST_TEMPLATES.items():
+    for sid, t in get_templates().items():
         cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
-        result.append({'id': sid, 'name': t['name'], 'has_kitchen': t.get('has_kitchen', False), **cfg})
+        sc  = scfg.get(sid, {})
+        result.append({
+            'id':          sid,
+            'name':        t['name'],
+            'has_kitchen': t.get('has_kitchen', False),
+            'is_builtin':  sid in _BASE_TEMPLATES,
+            'address':     sc.get('address', ''),
+            'start_time':  sc.get('start_time', ''),
+            **cfg,
+        })
     return jsonify(result)
+
+@app.route('/api/sites', methods=['POST'])
+@login_required
+def api_create_site():
+    data     = request.get_json() or {}
+    name     = data.get('name','').strip()
+    if not name: return jsonify({'error': 'Name required'}), 400
+    sid      = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_') or 'site'
+    templates = get_templates()
+    base_sid, counter = sid, 2
+    while sid in templates:
+        sid = f"{base_sid}_{counter}"; counter += 1
+    has_kitchen = bool(data.get('has_kitchen', False))
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+    scfg[sid] = {'name': name, 'has_kitchen': has_kitchen}
+    with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
+    return jsonify({'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'is_builtin': False}), 201
 
 @app.route('/api/sites/<site_id>', methods=['PUT'])
 @login_required
 def api_update_site(site_id):
-    if site_id not in CHECKLIST_TEMPLATES: return ('Not found', 404)
-    cfg = load_all_site_configs()
-    cfg[site_id] = request.get_json()
-    save_all_site_configs(cfg)
+    if site_id not in get_templates(): return ('Not found', 404)
+    data = dict(request.get_json() or {})
+    # Save name/has_kitchen/start_time/address to sites_config.json if present
+    site_meta = {}
+    for key in ('name', 'has_kitchen', 'start_time', 'address'):
+        if key in data: site_meta[key] = data.pop(key)
+    if site_meta:
+        try:
+            with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+        except: scfg = {}
+        if site_id not in scfg: scfg[site_id] = {}
+        scfg[site_id].update(site_meta)
+        with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
+    # Save schedule config (assigned_days, assigned_employees, enabled)
+    if data:
+        cfg = load_all_site_configs()
+        if site_id not in cfg: cfg[site_id] = {}
+        cfg[site_id].update(data)
+        save_all_site_configs(cfg)
+    return jsonify({'ok': True})
+
+@app.route('/api/sites/<site_id>', methods=['DELETE'])
+@login_required
+def api_delete_site(site_id):
+    if site_id in _BASE_TEMPLATES:
+        return jsonify({'error': 'Cannot delete built-in sites'}), 400
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+    scfg.pop(site_id, None)
+    with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
+    all_cfg = load_all_site_configs()
+    all_cfg.pop(site_id, None)
+    save_all_site_configs(all_cfg)
     return jsonify({'ok': True})
 
 @app.route('/api/sites/today')
@@ -872,7 +996,7 @@ def api_sites_today():
     emp_id = session.get('employee_id')
     all_cfg = load_all_site_configs()
     result = []
-    for sid, t in CHECKLIST_TEMPLATES.items():
+    for sid, t in get_templates().items():
         cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
         if not cfg.get('enabled', True): continue
         if day not in cfg.get('assigned_days', _DAY_NAMES): continue
@@ -888,7 +1012,7 @@ def api_sites_week():
     week = {}
     for day in _DAY_NAMES:
         sites = []
-        for sid, t in CHECKLIST_TEMPLATES.items():
+        for sid, t in get_templates().items():
             cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
             if not cfg.get('enabled', True): continue
             if day not in cfg.get('assigned_days', _DAY_NAMES): continue
@@ -918,7 +1042,7 @@ def api_post_arrival():
         'employee_id':   session.get('employee_id',''),
         'employee_name': session.get('employee_name','Admin'),
         'site_id':       request.form.get('site_id',''),
-        'site_name':     CHECKLIST_TEMPLATES.get(request.form.get('site_id',''), {}).get('name',''),
+        'site_name':     get_templates().get(request.form.get('site_id',''), {}).get('name',''),
         'arrived_at':    datetime.now().isoformat(),
         'lat':           request.form.get('lat',''),
         'lng':           request.form.get('lng',''),
@@ -943,6 +1067,58 @@ def api_post_arrival():
 @login_required
 def arrival_photo_serve(filename):
     return send_from_directory(os.path.join(PHOTOS_DIR, 'arrivals'), filename)
+
+@app.route('/api/employee/<eid>/today')
+@login_required
+def api_employee_today(eid):
+    """Returns today's activity for one employee: sites, arrival photo, proof photos."""
+    today      = datetime.now().strftime('%Y-%m-%d')
+    today_abbr = datetime.now().strftime('%a').lower()
+    templates  = get_templates()
+    all_cfg    = load_all_site_configs()
+
+    # Arrivals today for this employee
+    arrivals = [a for a in load_json(ARRIVALS_FILE)
+                if a.get('employee_id') == eid and a.get('arrived_at','').startswith(today)]
+
+    # Checklists today for this employee
+    checklists = [c for c in load_json(CHECKLISTS_FILE)
+                  if c.get('employee_id') == eid and c.get('date','') == today]
+
+    # Build site activity list
+    site_ids = set(a['site_id'] for a in arrivals) | set(c['site_id'] for c in checklists)
+    sites_out = []
+    for sid in site_ids:
+        tmpl     = templates.get(sid, {})
+        arrival  = next((a for a in arrivals if a['site_id'] == sid), None)
+        cl       = next((c for c in checklists if c['site_id'] == sid), None)
+        proof    = []
+        if cl and cl.get('proof_photos'):
+            for key, fn in cl['proof_photos'].items():
+                proof.append({'key': key, 'url': f'/proof-photos/{fn}'})
+        sites_out.append({
+            'site_id':      sid,
+            'site_name':    tmpl.get('name', sid),
+            'arrival_time': arrival['arrived_at'] if arrival else '',
+            'arrival_photo': f"/arrival-photos/{arrival['photo']}" if arrival and arrival.get('photo') else '',
+            'arrival_lat':  arrival.get('lat','') if arrival else '',
+            'arrival_lng':  arrival.get('lng','') if arrival else '',
+            'checklist_id': cl['id'] if cl else '',
+            'done_tasks':   cl.get('done_tasks', 0) if cl else 0,
+            'total_tasks':  cl.get('total_tasks', 0) if cl else 0,
+            'proof_photos': proof,
+            'submitted':    bool(cl and cl.get('submitted_at')),
+        })
+
+    employee = next((e for e in load_json(EMPLOYEES_FILE) if e['id'] == eid), {})
+    photo_fn = employee.get('photo','')
+    return jsonify({
+        'id':     eid,
+        'name':   employee.get('name', eid),
+        'mobile': employee.get('mobile',''),
+        'photo':  f'/emp-photos/{photo_fn}' if photo_fn else '',
+        'sites':  sites_out,
+    })
 
 # ── Proof photo upload ────────────────────────────────────────────────────────
 @app.route('/api/checklist/<cid>/proof/<photo_key>', methods=['POST'])
@@ -1171,7 +1347,7 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
             col = 0
             x_positions = [M, M + photo_w + 20]
             # Build label map from templates
-            has_kitchen = CHECKLIST_TEMPLATES.get(cl.get('site_id',''), {}).get('has_kitchen', False)
+            has_kitchen = get_templates().get(cl.get('site_id',''), {}).get('has_kitchen', False)
             proof_defs  = PROOF_PHOTOS_KITCHEN if has_kitchen else PROOF_PHOTOS_STANDARD
             label_map   = {p['key']: p['label'] for p in proof_defs}
 
@@ -1291,6 +1467,8 @@ def client_login():
             session['client_id']    = client['id']
             session['client_name']  = client['name']
             session['client_sites'] = client.get('sites', [])
+            logo = client.get('logo', '')
+            session['client_logo']  = f'/client-logos/{logo}' if logo else ''
             return redirect(url_for('client_dashboard'))
         error = 'Invalid username or password'
     return render_template('client_login.html', error=error)
@@ -1300,12 +1478,19 @@ def client_logout():
     session.pop('client_id', None)
     session.pop('client_name', None)
     session.pop('client_sites', None)
+    session.pop('client_logo', None)
     return redirect(url_for('client_login'))
 
 @app.route('/client')
 @client_required
 def client_dashboard():
-    return render_template('client.html')
+    return render_template('client.html',
+                           client_logo=session.get('client_logo',''),
+                           client_name=session.get('client_name',''))
+
+@app.route('/client-logos/<filename>')
+def serve_client_logo(filename):
+    return send_from_directory(CLIENT_LOGOS_DIR, filename)
 
 # ── Client stats API ──────────────────────────────────────────────────────────
 @app.route('/api/client/stats')
@@ -1329,7 +1514,7 @@ def api_client_stats():
     weekly_pct   = round(sum(pcts) / len(pcts)) if pcts else 0
     weekly_count = len(week_cls)
 
-    all_sites     = [(sid, t) for sid, t in CHECKLIST_TEMPLATES.items()
+    all_sites     = [(sid, t) for sid, t in get_templates().items()
                      if not client_sites or sid in client_sites]
     total_sites   = len(all_sites)
     kitchen_sites = sum(1 for _, t in all_sites if t.get('has_kitchen', False))
@@ -1441,6 +1626,126 @@ def api_delete_client(cid):
     clients = [c for c in load_json(CLIENTS_FILE) if c['id'] != cid]
     save_json(CLIENTS_FILE, clients)
     return jsonify({'ok': True})
+
+@app.route('/api/clients/<cid>/logo', methods=['POST'])
+@login_required
+def api_upload_client_logo(cid):
+    ensure_dirs()
+    f = request.files.get('logo')
+    if not f or not f.filename:
+        return jsonify({'error': 'No file'}), 400
+    ext = os.path.splitext(secure_filename(f.filename))[1].lower() or '.jpg'
+    fn  = f'client_{cid}{ext}'
+    f.save(os.path.join(CLIENT_LOGOS_DIR, fn))
+    clients = load_json(CLIENTS_FILE)
+    idx = next((i for i, c in enumerate(clients) if c['id'] == cid), None)
+    if idx is not None:
+        clients[idx]['logo'] = fn
+        save_json(CLIENTS_FILE, clients)
+    return jsonify({'logo_url': f'/client-logos/{fn}'})
+
+@app.route('/api/live-status')
+@login_required
+def api_live_status():
+    """TV dashboard: today's sites with employee check-in status and colour coding."""
+    from datetime import timedelta
+    now      = datetime.now()
+    today    = now.strftime('%Y-%m-%d')
+    today_abbr = now.strftime('%a').lower()  # mon, tue …
+
+    templates  = get_templates()
+    site_cfgs  = load_all_site_configs()
+    arrivals   = [a for a in load_json(ARRIVALS_FILE) if a.get('arrived_at','').startswith(today)]
+    employees  = {e['id']: e for e in load_json(EMPLOYEES_FILE)}
+
+    # Read start_time / address from sites_config.json
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+
+    result = []
+    for sid, tmpl in templates.items():
+        cfg        = site_cfgs.get(sid, {})
+        sc         = scfg.get(sid, {})
+        assigned_days = cfg.get('assigned_days', list(templates.keys()))
+        # Only include today's sites
+        if today_abbr not in cfg.get('assigned_days', ['mon','tue','wed','thu','fri','sat','sun']):
+            continue
+
+        start_time_str = sc.get('start_time', '')  # "HH:MM"
+        address        = sc.get('address', '')
+        assigned_emps  = cfg.get('assigned_employees', [])  # [] = all
+
+        # Site arrivals today
+        site_arrivals = {a['employee_id']: a for a in arrivals if a.get('site_id') == sid}
+
+        # Determine status per employee
+        emp_statuses = []
+        emp_pool = [e for e in employees.values()
+                    if not assigned_emps or e['id'] in assigned_emps]
+
+        for emp in emp_pool:
+            arrival = site_arrivals.get(emp['id'])
+            if arrival:
+                status = 'green'
+                arrival_time = arrival.get('arrived_at','')
+            else:
+                arrival_time = ''
+                if start_time_str:
+                    try:
+                        h, m   = map(int, start_time_str.split(':'))
+                        sched  = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                        mins_late = (now - sched).total_seconds() / 60
+                        if mins_late < 0:        status = 'pending'   # start time not yet reached
+                        elif mins_late < 30:     status = 'yellow'
+                        elif mins_late < 60:     status = 'yellow'
+                        else:                    status = 'red'
+                    except: status = 'pending'
+                else:
+                    status = 'pending'
+
+            photo_fn = emp.get('photo','')
+            emp_statuses.append({
+                'id':           emp['id'],
+                'name':         emp['name'],
+                'mobile':       emp.get('mobile',''),
+                'photo':        f'/emp-photos/{photo_fn}' if photo_fn else '',
+                'checked_in':   bool(arrival),
+                'arrival_time': arrival_time,
+                'lat':          arrival.get('lat','')  if arrival else '',
+                'lng':          arrival.get('lng','')  if arrival else '',
+                'status':       status,
+            })
+
+        result.append({
+            'id':          sid,
+            'name':        tmpl['name'],
+            'has_kitchen': tmpl.get('has_kitchen', False),
+            'start_time':  start_time_str,
+            'address':     address,
+            'employees':   emp_statuses,
+            'checkin_count': len(site_arrivals),
+        })
+
+    return jsonify({'sites': result, 'now': now.strftime('%H:%M'), 'date': today})
+
+@app.route('/api/sites-with-clients')
+@employee_or_admin_required
+def api_sites_with_clients():
+    """Returns {site_id: {client_name, logo_url}} for all assigned sites."""
+    clients = load_json(CLIENTS_FILE)
+    result  = {}
+    for client in clients:
+        if not client.get('active', True):
+            continue
+        logo = client.get('logo', '')
+        logo_url = f'/client-logos/{logo}' if logo else ''
+        for sid in client.get('sites', []):
+            result[sid] = {
+                'client_name': client['name'],
+                'logo_url':    logo_url,
+            }
+    return jsonify(result)
 
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
