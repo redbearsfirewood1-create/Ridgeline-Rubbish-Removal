@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ridgeline">
+<title>Ridgeline — Job</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; color: #f0f0f0; }
+
+.topbar { background: #111; border-bottom: 1px solid #222; padding: 0 16px;
+          height: 52px; display: flex; align-items: center; gap: 10px; position: sticky; top:0; z-index:100; }
+.topbar img { height: 28px; object-fit: contain; }
+.topbar-title { font-size: 14px; font-weight: 900; color: #3d8b3d; flex: 1; }
+.topbar-sub   { font-size: 11px; color: #666; }
+.btn-back { font-size: 12px; color: #888; text-decoration: none; }
+
+.page { max-width: 640px; margin: 0 auto; padding: 16px 16px 80px; }
+
+/* Cards */
+.card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; padding: 18px; margin-bottom: 12px; }
+.card-title { font-size: 12px; font-weight: 700; color: #3d8b3d; text-transform: uppercase;
+              letter-spacing: .5px; margin-bottom: 14px; }
+
+/* Customer info */
+.cust-name  { font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+.cust-meta  { font-size: 13px; color: #888; margin-bottom: 6px; }
+.cust-addr  { font-size: 13px; color: #ccc; }
+.btn-navigate-job { display: inline-block; margin-top: 10px; padding: 9px 18px;
+                    background: #1f2e1f; border: 1px solid #3d8b3d; color: #5dbf5d;
+                    border-radius: 8px; font-size: 13px; font-weight: 700; text-decoration: none; }
+
+/* Items */
+.item-row { display: flex; justify-content: space-between; padding: 7px 0;
+            border-bottom: 1px solid #222; font-size: 14px; }
+.item-row:last-child { border-bottom: none; }
+.item-total-row { display: flex; justify-content: space-between; padding: 10px 0 0;
+                  font-size: 18px; font-weight: 900; color: #3d8b3d; }
+
+/* Photos */
+.photo-section { margin-bottom: 14px; }
+.photo-label { font-size: 13px; font-weight: 700; color: #f0f0f0; margin-bottom: 8px; }
+.photo-label span { font-size: 11px; color: #666; font-weight: 400; margin-left: 6px; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.photo-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #2a2a2a; }
+.photo-add { width: 100%; aspect-ratio: 1; background: #111; border: 2px dashed #333;
+             border-radius: 8px; display: flex; align-items: center; justify-content: center;
+             font-size: 24px; cursor: pointer; color: #555; }
+.photo-add:hover { border-color: #3d8b3d; color: #3d8b3d; }
+.photo-input { display: none; }
+
+/* Payment */
+.pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pay-btn { padding: 14px 10px; background: #111; border: 2px solid #2a2a2a; border-radius: 10px;
+           font-size: 14px; font-weight: 700; color: #aaa; cursor: pointer; text-align: center;
+           transition: all .15s; }
+.pay-btn:hover { border-color: #3d8b3d; color: #f0f0f0; background: #1f2e1f; }
+.pay-btn.selected { border-color: #3d8b3d; background: #1f2e1f; color: #5dbf5d; }
+
+/* Email input */
+.email-row { display: flex; gap: 8px; margin-top: 10px; }
+.email-row input { flex: 1; background: #111; border: 1px solid #333; border-radius: 8px;
+                   padding: 10px 12px; color: #f0f0f0; font-size: 14px; outline: none; }
+.email-row input:focus { border-color: #3d8b3d; }
+.btn-email { background: #1a2a40; border: 1px solid #2a5a80; color: #88ccff;
+             border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 700;
+             cursor: pointer; white-space: nowrap; }
+.btn-email:hover { background: #1e3550; }
+
+/* Action buttons */
+.action-row { display: flex; gap: 8px; margin-top: 10px; }
+.btn-sms { flex: 1; padding: 12px; background: #1f2e1f; border: 1px solid #3d8b3d;
+           color: #5dbf5d; border-radius: 10px; font-size: 14px; font-weight: 700;
+           cursor: pointer; text-align: center; text-decoration: none; }
+.btn-pdf { flex: 1; padding: 12px; background: #1a2e2e; border: 1px solid #2a7070;
+           color: #5dbfbf; border-radius: 10px; font-size: 14px; font-weight: 700;
+           cursor: pointer; text-align: center; text-decoration: none; }
+
+/* Complete button */
+.btn-complete { width: 100%; padding: 18px; background: #3d8b3d; color: #fff; border: none;
+                border-radius: 14px; font-size: 18px; font-weight: 900; cursor: pointer;
+                margin-top: 4px; }
+.btn-complete:hover { background: #2d6b2d; }
+.btn-complete:disabled { background: #555; cursor: default; }
+.btn-complete.done { background: #1f2e1f; border: 2px solid #3d8b3d; color: #5dbf5d; }
+
+/* Status badge */
+.status-badge { display: inline-block; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 700; }
+.s-pending  { background: #2e2000; color: #ffab40; }
+.s-accepted { background: #1f2e1f; color: #5dbf5d; }
+.s-done     { background: #1a1a2e; color: #7c9fff; }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+         background: #3d8b3d; color: #fff; padding: 10px 20px; border-radius: 8px;
+         font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.toast.error { background: #8b3d3d; }
+
+/* ── Ridgeline loaders ───────────────────────────────────── */
+@keyframes rl-spin    { to { transform:rotate(360deg) } }
+@keyframes rl-spin-r  { to { transform:rotate(-360deg) } }
+@keyframes rl-glow    { 0%,100%{opacity:.35;transform:scale(1)} 50%{opacity:.9;transform:scale(1.45)} }
+@keyframes rl-breath  { 0%,100%{opacity:.82;transform:scale(1)} 50%{opacity:1;transform:scale(1.04)} }
+@keyframes rl-bounce  { 0%,80%,100%{transform:scale(.7);opacity:.3} 40%{transform:scale(1.25);opacity:1} }
+@keyframes rl-fade-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes rl-scan    { 0%{left:-40%} 100%{left:110%} }
+
+/* Full-page loader */
+#rl-page-loader{
+  position:fixed;inset:0;background:#0d0d0d;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;
+  opacity:0;pointer-events:none;transition:opacity .28s ease;
+}
+#rl-page-loader.rl-show{opacity:1;pointer-events:all;}
+
+/* Logo + ring wrapper */
+.rl-logo-wrap{
+  position:relative;width:280px;height:168px;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* Outer spinning oval */
+.rl-oval-1{
+  position:absolute;inset:-18px;border-radius:50%;
+  border:2px solid transparent;
+  border-top-color:#3d8b3d;border-right-color:#3d8b3d;
+  box-shadow:0 0 12px rgba(61,139,61,.25);
+  animation:rl-spin 1.6s cubic-bezier(.5,0,.5,1) infinite;
+}
+/* Inner counter-spin oval */
+.rl-oval-2{
+  position:absolute;inset:-6px;border-radius:50%;
+  border:1.5px solid transparent;
+  border-bottom-color:#2a5c2a;border-left-color:#2a5c2a;
+  animation:rl-spin-r .9s linear infinite;
+}
+/* Green glow behind logo */
+.rl-glow-bg{
+  position:absolute;width:230px;height:120px;
+  background:radial-gradient(ellipse at center,rgba(61,139,61,.2) 0%,transparent 70%);
+  animation:rl-glow 2.8s ease-in-out infinite;
+  pointer-events:none;
+}
+/* Logo itself */
+.rl-logo-img{
+  position:relative;width:220px;object-fit:contain;
+  animation:rl-breath 2.8s ease-in-out infinite;
+  filter:drop-shadow(0 0 8px rgba(61,139,61,.18));
+}
+/* Scan line sweep across logo */
+.rl-scan-wrap{
+  position:absolute;inset:0;border-radius:50%;overflow:hidden;pointer-events:none;
+}
+.rl-scan-line{
+  position:absolute;top:0;bottom:0;width:35%;
+  background:linear-gradient(90deg,transparent,rgba(61,139,61,.12),transparent);
+  animation:rl-scan 2.2s linear infinite;
+}
+
+/* Bouncing dots */
+.rl-dots{display:flex;gap:9px;align-items:center;}
+.rl-dot{
+  width:7px;height:7px;border-radius:50%;background:#3d8b3d;
+  animation:rl-bounce 1.3s ease-in-out infinite;
+}
+.rl-dot:nth-child(1){animation-delay:0s}
+.rl-dot:nth-child(2){animation-delay:.18s;background:#2d6b2d;}
+.rl-dot:nth-child(3){animation-delay:.36s;background:#1f4c1f;}
+
+/* Inline page spinners (small) */
+.rl-ring-sm{
+  width:22px;height:22px;border:2px solid #1e1e1e;border-top-color:#3d8b3d;
+  border-radius:50%;animation:rl-spin .75s linear infinite;flex-shrink:0;
+}
+.rl-loading{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  color:#555;font-size:13px;padding:36px 16px;
+}
+/* ───────────────────────────────────────────────────────── */
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="/static/logo.png" alt="" onerror="this.style.display='none'">
+  <div class="topbar-title" id="topTitle">Job</div>
+  <a href="/route" class="btn-back">← Route</a>
+</div>
+
+<div class="page">
+
+  <!-- Customer -->
+  <div class="card">
+    <div class="card-title">👤 Customer</div>
+    <div class="cust-name" id="custName">{{ quote.customer_name or 'Unknown' }}</div>
+    <div class="cust-meta">📱 {{ quote.mobile or '—' }} &nbsp;|&nbsp; {{ quote.quote_number }}</div>
+    <div class="cust-addr">📍 {{ quote.address or 'No address' }}</div>
+    {% if quote.address %}
+    <a href="https://www.google.com/maps/dir/?api=1&destination={{ quote.address | urlencode }}"
+       target="_blank" class="btn-navigate-job">🗺️ Navigate to Job</a>
+    {% endif %}
+  </div>
+
+  <!-- Quote items -->
+  <div class="card">
+    <div class="card-title">🗑️ Items</div>
+    {% for item in quote.items or [] %}
+    <div class="item-row">
+      <span>{{ item.name }} × {{ item.qty }}</span>
+      <span>${{ "%.2f" % (item.qty * item.unit_price) }}</span>
+    </div>
+    {% endfor %}
+    {% for item in quote.custom_items or [] %}
+    <div class="item-row">
+      <span>{{ item.description }}</span>
+      <span>${{ "%.2f" % item.amount }}</span>
+    </div>
+    {% endfor %}
+    {% if quote.collection_fee %}
+    <div class="item-row">
+      <span>Collection Fee ({{ quote.distance_km }} km)</span>
+      <span>${{ "%.2f" % quote.collection_fee }}</span>
+    </div>
+    {% endif %}
+    <div class="item-total-row">
+      <span>Total</span>
+      <span>${{ "%.2f" % (quote.total or 0) }}</span>
+    </div>
+  </div>
+
+  <!-- Before photos -->
+  <div class="card">
+    <div class="card-title">📷 Before Photos</div>
+    <div class="photo-section">
+      <div class="photo-label">Before <span>Capture site condition on arrival</span></div>
+      <div class="photo-grid" id="beforeGrid">
+        {% for p in quote.photos_before or [] %}
+        <img src="/quote-photos/{{ p }}" class="photo-thumb" alt="Before">
+        {% endfor %}
+        <div class="photo-add" onclick="document.getElementById('beforeInput').click()">＋</div>
+      </div>
+      <input class="photo-input" type="file" id="beforeInput" accept="image/*" capture="environment"
+             multiple onchange="uploadPhotos('before', this)">
+    </div>
+  </div>
+
+  <!-- After photos -->
+  <div class="card">
+    <div class="card-title">✅ After Photos</div>
+    <div class="photo-section">
+      <div class="photo-label">After <span>Capture cleared site on completion</span></div>
+      <div class="photo-grid" id="afterGrid">
+        {% for p in quote.photos_after or [] %}
+        <img src="/quote-photos/{{ p }}" class="photo-thumb" alt="After">
+        {% endfor %}
+        <div class="photo-add" onclick="document.getElementById('afterInput').click()">＋</div>
+      </div>
+      <input class="photo-input" type="file" id="afterInput" accept="image/*" capture="environment"
+             multiple onchange="uploadPhotos('after', this)">
+    </div>
+  </div>
+
+  <!-- Payment method -->
+  <div class="card">
+    <div class="card-title">💳 Payment Method</div>
+    <div class="pay-grid">
+      <button class="pay-btn" onclick="selectPayment('Cash')">💵 Cash</button>
+      <button class="pay-btn" onclick="selectPayment('Card')">💳 Card</button>
+      <button class="pay-btn" onclick="selectPayment('PayID')">📱 PayID</button>
+      <button class="pay-btn" onclick="selectPayment('Transfer')">🏦 Transfer</button>
+    </div>
+    <div id="paySelected" style="font-size:12px;color:#666;margin-top:8px"></div>
+  </div>
+
+  <!-- Invoice & SMS -->
+  <div class="card">
+    <div class="card-title">📨 Invoice</div>
+    <div class="action-row">
+      <button class="btn-sms" onclick="sendSMS()">💬 SMS Invoice</button>
+      <a href="/api/quotes/{{ quote.id }}/invoice" target="_blank" class="btn-pdf">🧾 PDF Invoice</a>
+    </div>
+    <div class="email-row">
+      <input type="email" id="emailAddr" placeholder="customer@email.com">
+      <button class="btn-email" onclick="sendEmail()">📧 Email</button>
+    </div>
+  </div>
+
+  <!-- Complete -->
+  <div class="card">
+    <div class="card-title">🏁 Job Status</div>
+    <button class="btn-complete {% if quote.status == 'done' %}done{% endif %}"
+            id="btnComplete" onclick="markComplete()"
+            {% if quote.status == 'done' %}disabled{% endif %}>
+      {% if quote.status == 'done' %}✓ Job Complete{% else %}✅ Mark Job Complete{% endif %}
+    </button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const QUOTE_ID   = '{{ quote.id }}';
+const CUSTOMER   = '{{ quote.customer_name | e }}';
+const MOBILE     = '{{ quote.mobile | e }}';
+const ADDRESS    = '{{ quote.address | e }}';
+const QUOTE_NUM  = '{{ quote.quote_number }}';
+const TOTAL      = {{ quote.total or 0 }};
+let selectedPayment = '{{ quote.payment_method or '' }}';
+
+document.getElementById('topTitle').textContent = CUSTOMER || 'Job';
+
+// Restore selected payment highlight
+if (selectedPayment) {
+  document.querySelectorAll('.pay-btn').forEach(b => {
+    if (b.textContent.includes(selectedPayment)) b.classList.add('selected');
+  });
+  document.getElementById('paySelected').textContent = `Selected: ${selectedPayment}`;
+}
+
+// ── Payment ───────────────────────────────────────────────────────────────────
+async function selectPayment(method) {
+  selectedPayment = method;
+  document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('paySelected').textContent = `Selected: ${method}`;
+  await fetch(`/api/quotes/${QUOTE_ID}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payment_method: method })
+  });
+  showToast(`Payment: ${method}`);
+}
+
+// ── Photo upload ──────────────────────────────────────────────────────────────
+async function uploadPhotos(type, input) {
+  const files = Array.from(input.files);
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('photo', file);
+    const res = await fetch(`/api/quotes/${QUOTE_ID}/photos/${type}`, { method: 'POST', body: fd });
+    if (res.ok) {
+      const d = await res.json();
+      // Append new thumb to grid
+      const grid = document.getElementById(type + 'Grid');
+      const addBtn = grid.querySelector('.photo-add');
+      const img = document.createElement('img');
+      img.src = `/quote-photos/${d.photo}`;
+      img.className = 'photo-thumb';
+      img.alt = type;
+      grid.insertBefore(img, addBtn);
+    }
+  }
+  showToast(`✅ ${files.length} ${type} photo${files.length !== 1 ? 's' : ''} saved`);
+  input.value = '';
+}
+
+// ── SMS ───────────────────────────────────────────────────────────────────────
+function sendSMS() {
+  const mobile = MOBILE.trim().replace(/\s/g, '');
+  if (!mobile) { showToast('No mobile number on this quote', true); return; }
+
+  const lines = [];
+  {% for item in quote.items or [] %}
+  lines.push('• {{ item.name }} × {{ item.qty }}: ${{ "%.2f" % (item.qty * item.unit_price) }}');
+  {% endfor %}
+  {% for item in quote.custom_items or [] %}
+  lines.push('• {{ item.description }}: ${{ "%.2f" % item.amount }}');
+  {% endfor %}
+  {% if quote.collection_fee %}
+  lines.push('• Collection Fee: ${{ "%.2f" % quote.collection_fee }}');
+  {% endif %}
+
+  const pm = selectedPayment ? `\nPayment: ${selectedPayment}` : '';
+  const body = encodeURIComponent(
+    `Hi ${CUSTOMER}, here is your Ridgeline Services invoice (${QUOTE_NUM}):\n\n` +
+    `${lines.join('\n')}\n\nTOTAL: $${TOTAL.toFixed(2)}${pm}\n\n` +
+    `Thank you for choosing Ridgeline Services!`
+  );
+
+  const num = mobile.startsWith('0') ? '+61' + mobile.slice(1) : mobile;
+  window.location.href = `sms:${num}?body=${body}`;
+}
+
+// ── Email ─────────────────────────────────────────────────────────────────────
+async function sendEmail() {
+  const email = document.getElementById('emailAddr').value.trim();
+  if (!email) { showToast('Enter an email address', true); return; }
+
+  const btn = document.querySelector('.btn-email');
+  btn.textContent = 'Sending…'; btn.disabled = true;
+
+  const res = await fetch(`/api/quotes/${QUOTE_ID}/send-invoice`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const d = await res.json();
+  btn.textContent = '📧 Email'; btn.disabled = false;
+
+  if (d.sent) {
+    showToast(`✅ Invoice sent to ${email}`);
+  } else {
+    showToast(d.error || 'Send failed', true);
+  }
+}
+
+// ── Mark complete ─────────────────────────────────────────────────────────────
+async function markComplete() {
+  const btn = document.getElementById('btnComplete');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const res = await fetch(`/api/quotes/${QUOTE_ID}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'done' })
+  });
+
+  if (res.ok) {
+    btn.textContent = '✓ Job Complete';
+    btn.classList.add('done');
+    showToast('✅ Job marked complete!');
+  } else {
+    btn.disabled = false;
+    btn.textContent = '✅ Mark Job Complete';
+    showToast('Failed to update', true);
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

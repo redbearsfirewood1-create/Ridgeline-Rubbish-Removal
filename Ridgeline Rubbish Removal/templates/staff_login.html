@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#3d8b3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ridgeline Staff">
+<title>Ridgeline — Staff Login</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:Arial,sans-serif;}
+body{
+  background:#0d0d0d;
+  min-height:100dvh;
+  color:#f0f0f0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:24px 16px;
+}
+
+.card{
+  background:#151515;
+  border:1px solid #222;
+  border-radius:20px;
+  padding:36px 28px 32px;
+  width:100%;
+  max-width:400px;
+  text-align:center;
+}
+
+.logo-wrap{margin-bottom:24px;}
+.logo-wrap img{height:48px;object-fit:contain;}
+.logo-wrap .brand{font-size:24px;font-weight:900;color:#3d8b3d;margin-top:8px;}
+
+h1{font-size:18px;font-weight:700;color:#ccc;margin-bottom:6px;}
+.sub{font-size:13px;color:#555;margin-bottom:28px;}
+
+label{display:block;font-size:12px;color:#888;text-align:left;margin-bottom:5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+
+select, input[type="text"], input[type="tel"]{
+  width:100%;
+  background:#1e1e1e;
+  border:1px solid #333;
+  border-radius:10px;
+  color:#f0f0f0;
+  font-size:16px;
+  padding:12px 14px;
+  outline:none;
+  margin-bottom:16px;
+  appearance:none;
+  -webkit-appearance:none;
+}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;}
+select:focus, input:focus{border-color:#3d8b3d;}
+
+.pin-wrap{position:relative;margin-bottom:16px;}
+.pin-wrap input{margin-bottom:0;padding-right:48px;letter-spacing:.18em;font-size:22px;text-align:center;}
+.pin-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:#666;padding:4px;}
+
+.error{
+  background:#2a1414;
+  border:1px solid #5c2020;
+  color:#ff7070;
+  font-size:13px;
+  border-radius:8px;
+  padding:10px 14px;
+  margin-bottom:16px;
+  text-align:left;
+}
+
+.btn-login{
+  width:100%;
+  background:#3d8b3d;
+  color:#fff;
+  border:none;
+  border-radius:12px;
+  font-size:17px;
+  font-weight:700;
+  padding:14px;
+  cursor:pointer;
+  margin-top:4px;
+  letter-spacing:.01em;
+}
+.btn-login:hover{background:#4aa84a;}
+.btn-login:active{background:#2f6e2f;}
+
+.footer{margin-top:28px;font-size:12px;color:#444;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo-wrap">
+    <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+    <div class="brand">Ridgeline</div>
+  </div>
+
+  <h1>Staff Login</h1>
+  <p class="sub">Select your name and enter your PIN</p>
+
+  {% if error %}
+  <div class="error">⚠️ {{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/staff" autocomplete="off">
+
+    <label for="emp_id">Your Name</label>
+    <select name="emp_id" id="emp_id" required>
+      <option value="" disabled selected>— Select —</option>
+      {% for emp in employees %}
+      <option value="{{ emp.id }}">{{ emp.name }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="pin">PIN</label>
+    <div class="pin-wrap">
+      <input type="tel" name="pin" id="pin" inputmode="numeric" pattern="[0-9]*"
+             placeholder="••••" autocomplete="off" required maxlength="8">
+      <button type="button" class="pin-toggle" id="pinToggle" onclick="togglePin()">👁</button>
+    </div>
+
+    <button type="submit" class="btn-login">Sign In →</button>
+  </form>
+</div>
+
+<div class="footer">Ridgeline Rubbish Removal · Staff Portal</div>
+
+<script>
+function togglePin() {
+  const inp = document.getElementById('pin');
+  const btn = document.getElementById('pinToggle');
+  if (inp.type === 'tel') {
+    inp.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    inp.type = 'tel';
+    btn.textContent = '👁';
+  }
+}
+
+// Auto-select employee if URL has ?id=
+const params = new URLSearchParams(location.search);
+const preId = params.get('id');
+if (preId) {
+  const sel = document.getElementById('emp_id');
+  for (let opt of sel.options) {
+    if (opt.value === preId) { opt.selected = true; break; }
+  }
+}
+</script>
+</body>
+</html>
