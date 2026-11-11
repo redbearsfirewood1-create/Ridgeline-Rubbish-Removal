@@ -789,7 +789,13 @@ def checklist_login():
             session['employee_name'] = emp['name']
             return jsonify({'ok': True, 'name': emp['name']})
         return jsonify({'error': 'Wrong PIN'}), 401
-    return render_template('checklist.html', templates=get_templates(), today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+    return render_template('checklist.html',
+        templates=get_templates(),
+        today=datetime.now().strftime('%Y-%m-%d'),
+        day=_today_day_abbr(),
+        session_emp_id=session.get('employee_id',''),
+        session_emp_name=session.get('employee_name','')
+    )
 
 # ── Staff login (separate simple page, form-POST — no JSON/fetch) ─────────────
 @app.route('/staff', methods=['GET','POST'])
@@ -808,9 +814,21 @@ def staff_login():
     active_emps = [e for e in load_json(EMPLOYEES_FILE) if e.get('active', True)]
     return render_template('staff_login.html', employees=active_emps, error=error)
 
+@app.route('/api/checklist/session')
+def api_checklist_session():
+    if session.get('employee_id'):
+        return jsonify({'employee_id': session['employee_id'], 'employee_name': session.get('employee_name','')})
+    return jsonify({})
+
 @app.route('/checklist')
 def checklist_home():
-    return render_template('checklist.html', templates=get_templates(), today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+    return render_template('checklist.html',
+        templates=get_templates(),
+        today=datetime.now().strftime('%Y-%m-%d'),
+        day=_today_day_abbr(),
+        session_emp_id=session.get('employee_id',''),
+        session_emp_name=session.get('employee_name','')
+    )
 
 @app.route('/checklist/logout')
 def checklist_logout():

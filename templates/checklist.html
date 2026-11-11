@@ -428,6 +428,10 @@ let weeklyState = {};
 let proofUploaded = {};
 let siteClientMap = {}; // site_id → {client_name, logo_url}
 
+// ── Session injected by Flask (fastest path — no fetch needed) ────────────
+const FLASK_EMP_ID   = '{{ session_emp_id   | default("") }}';
+const FLASK_EMP_NAME = '{{ session_emp_name | default("") }}';
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   loadEmployees();
@@ -436,7 +440,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const r = await fetch('/api/sites-with-clients');
     if (r.ok) siteClientMap = await r.json();
   } catch(e) {}
-  // Check existing employee session
+
+  // Use Flask-injected session first (instant, no network call)
+  if (FLASK_EMP_ID && FLASK_EMP_NAME) {
+    currentEmployee = {name: FLASK_EMP_NAME, id: FLASK_EMP_ID};
+    setEmployeeBadge(FLASK_EMP_NAME);
+    showPhase('phaseSites');
+    loadSites();
+    return;
+  }
+
+  // Fallback: check session via API (handles page refreshes)
   try {
     const r = await fetch('/api/checklist/session');
     const d = await r.json();
