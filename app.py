@@ -814,12 +814,6 @@ def staff_login():
     active_emps = [e for e in load_json(EMPLOYEES_FILE) if e.get('active', True)]
     return render_template('staff_login.html', employees=active_emps, error=error)
 
-@app.route('/api/checklist/session')
-def api_checklist_session():
-    if session.get('employee_id'):
-        return jsonify({'employee_id': session['employee_id'], 'employee_name': session.get('employee_name','')})
-    return jsonify({})
-
 @app.route('/checklist')
 def checklist_home():
     return render_template('checklist.html',
