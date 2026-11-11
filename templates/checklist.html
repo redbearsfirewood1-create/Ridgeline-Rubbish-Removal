@@ -273,6 +273,13 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
   <div class="login-wrap">
     <div class="login-title">🧹 Cleaner Sign In</div>
     <div class="login-sub">Select your name and enter your PIN</div>
+
+    <!-- Hidden form — submitted by JS, no fetch needed -->
+    <form id="loginForm" method="POST" action="/checklist/login" style="display:none">
+      <input type="hidden" name="id"  id="loginEmpId">
+      <input type="hidden" name="pin" id="loginPin">
+    </form>
+
     <select class="emp-select" id="empSelect"><option value="">Loading…</option></select>
     <div class="pin-label">Enter PIN</div>
     <div class="pin-display">
@@ -280,21 +287,21 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
       <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
     </div>
     <div class="pin-pad">
-      <button class="pin-btn" onclick="pinPress('1')">1</button>
-      <button class="pin-btn" onclick="pinPress('2')">2</button>
-      <button class="pin-btn" onclick="pinPress('3')">3</button>
-      <button class="pin-btn" onclick="pinPress('4')">4</button>
-      <button class="pin-btn" onclick="pinPress('5')">5</button>
-      <button class="pin-btn" onclick="pinPress('6')">6</button>
-      <button class="pin-btn" onclick="pinPress('7')">7</button>
-      <button class="pin-btn" onclick="pinPress('8')">8</button>
-      <button class="pin-btn" onclick="pinPress('9')">9</button>
-      <button class="pin-btn del" onclick="pinClear()">CLR</button>
-      <button class="pin-btn" onclick="pinPress('0')">0</button>
-      <button class="pin-btn del" onclick="pinBack()">⌫</button>
+      <button class="pin-btn" type="button" onclick="pinPress('1')">1</button>
+      <button class="pin-btn" type="button" onclick="pinPress('2')">2</button>
+      <button class="pin-btn" type="button" onclick="pinPress('3')">3</button>
+      <button class="pin-btn" type="button" onclick="pinPress('4')">4</button>
+      <button class="pin-btn" type="button" onclick="pinPress('5')">5</button>
+      <button class="pin-btn" type="button" onclick="pinPress('6')">6</button>
+      <button class="pin-btn" type="button" onclick="pinPress('7')">7</button>
+      <button class="pin-btn" type="button" onclick="pinPress('8')">8</button>
+      <button class="pin-btn" type="button" onclick="pinPress('9')">9</button>
+      <button class="pin-btn del" type="button" onclick="pinClear()">CLR</button>
+      <button class="pin-btn" type="button" onclick="pinPress('0')">0</button>
+      <button class="pin-btn del" type="button" onclick="pinBack()">⌫</button>
     </div>
-    <button class="btn-primary" id="btnLogin" onclick="doLogin()" disabled>Sign In</button>
-    <div class="login-err" id="loginErr"></div>
+    <button class="btn-primary" id="btnLogin" type="button" onclick="doLogin()" disabled>Sign In</button>
+    <div class="login-err" id="loginErr">{{ login_error | default('') }}</div>
   </div>
 </div>
 
@@ -463,6 +470,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch(e) {}
 });
 
+const FLASK_LOGIN_ERR  = '{{ login_error  | default("") }}';
+const FLASK_LOGIN_EMP  = '{{ login_emp_id | default("") }}';
+
 async function loadEmployees() {
   try {
     const r = await fetch('/api/employees');
@@ -470,7 +480,11 @@ async function loadEmployees() {
     const sel = document.getElementById('empSelect');
     if (!emps.length) { sel.innerHTML='<option value="">No employees — ask admin to add you</option>'; return; }
     sel.innerHTML = '<option value="">— Select your name —</option>' +
-      emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+      emps.map(e=>`<option value="${e.id}"${e.id===FLASK_LOGIN_EMP?' selected':''}>${e.name}</option>`).join('');
+    // If Flask sent back a login error, re-enable the login button ready to retry
+    if (FLASK_LOGIN_ERR && FLASK_LOGIN_EMP) {
+      document.getElementById('btnLogin').disabled = false;
+    }
   } catch(e) {}
 }
 
@@ -493,28 +507,13 @@ document.getElementById('empSelect').addEventListener('change', e => {
 });
 
 // ── Login ──────────────────────────────────────────────────────────────────
-async function doLogin() {
+function doLogin() {
   const empId = document.getElementById('empSelect').value;
-  if (!empId || pin.length!==4) return;
-  document.getElementById('loginErr').textContent = '';
-  document.getElementById('btnLogin').disabled = true;
-  try {
-    const r = await fetch('/checklist/login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({id: empId, pin})
-    });
-    const d = await r.json();
-    if (r.ok) {
-      currentEmployee = {name: d.name, id: empId};
-      setEmployeeBadge(d.name);
-      showPhase('phaseSites');
-      loadSites();
-    } else {
-      document.getElementById('loginErr').textContent = d.error || 'Wrong PIN — try again';
-      pinClear();
-    }
-  } catch(e) { document.getElementById('loginErr').textContent='Connection error'; }
-  finally { document.getElementById('btnLogin').disabled = false; }
+  if (!empId || pin.length < 1) return;
+  // Populate hidden form fields and submit — no fetch, no JSON, no connection errors
+  document.getElementById('loginEmpId').value = empId;
+  document.getElementById('loginPin').value   = pin;
+  document.getElementById('loginForm').submit();
 }
 
 function setEmployeeBadge(name) {

@@ -779,16 +779,39 @@ def monitor_page():
 @app.route('/checklist/login', methods=['GET','POST'])
 def checklist_login():
     if request.method == 'POST':
-        data = request.get_json(force=True, silent=True) or {}
-        emp_id  = data.get('id','')
-        pin     = str(data.get('pin','')).strip()
-        emps    = load_json(EMPLOYEES_FILE)
-        emp     = next((e for e in emps if e['id']==emp_id and str(e.get('pin',''))==pin and e.get('active',True)), None)
-        if emp:
-            session['employee_id']   = emp['id']
-            session['employee_name'] = emp['name']
-            return jsonify({'ok': True, 'name': emp['name']})
-        return jsonify({'error': 'Wrong PIN'}), 401
+        ct = request.content_type or ''
+        if 'application/json' in ct:
+            # Legacy JSON path (kept for any old clients)
+            data   = request.get_json(force=True, silent=True) or {}
+            emp_id = data.get('id','')
+            pin    = str(data.get('pin','')).strip()
+            emps   = load_json(EMPLOYEES_FILE)
+            emp    = next((e for e in emps if e['id']==emp_id and str(e.get('pin',''))==pin and e.get('active',True)), None)
+            if emp:
+                session['employee_id']   = emp['id']
+                session['employee_name'] = emp['name']
+                return jsonify({'ok': True, 'name': emp['name']})
+            return jsonify({'error': 'Wrong PIN'}), 401
+        else:
+            # Form POST path — no fetch, no JSON, no "Connection error"
+            emp_id = request.form.get('id','').strip()
+            pin    = str(request.form.get('pin','')).strip()
+            emps   = load_json(EMPLOYEES_FILE)
+            emp    = next((e for e in emps if e['id']==emp_id and str(e.get('pin',''))==pin and e.get('active',True)), None)
+            if emp:
+                session['employee_id']   = emp['id']
+                session['employee_name'] = emp['name']
+                return redirect(url_for('checklist_home'))
+            # Wrong PIN — re-render login with error shown inline
+            return render_template('checklist.html',
+                templates=get_templates(),
+                today=datetime.now().strftime('%Y-%m-%d'),
+                day=_today_day_abbr(),
+                session_emp_id='',
+                session_emp_name='',
+                login_error='Wrong PIN — please try again',
+                login_emp_id=emp_id,
+            )
     return render_template('checklist.html',
         templates=get_templates(),
         today=datetime.now().strftime('%Y-%m-%d'),
