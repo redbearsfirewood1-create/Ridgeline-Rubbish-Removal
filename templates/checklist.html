@@ -572,16 +572,22 @@ function renderTodaySites(sites) {
     wrap.innerHTML='<div class="no-sites"><div class="no-sites-icon">🎉</div>No sites scheduled for today!</div>';
     return;
   }
-  wrap.innerHTML = sites.map((s,i) => `
+  wrap.innerHTML = sites.map((s,i) => {
+    const cl = siteClientMap[s.id];
+    const iconHtml = (cl && cl.logo_url)
+      ? `<img src="${cl.logo_url}" alt="${cl.client_name||''}" style="width:44px;height:44px;object-fit:contain;border-radius:8px;flex-shrink:0;">`
+      : `<div class="site-bubble-icon">📋</div>`;
+    return `
     <div class="site-bubble" data-site-idx="${i}" onclick="startSite(${i})">
-      <div class="site-bubble-icon">🍔</div>
+      ${iconHtml}
       <div class="site-bubble-body">
         <div class="site-bubble-name">${s.name}</div>
         ${s.address ? `<div class="site-bubble-addr">📍 ${s.address}</div>` : ''}
         ${s.start_time ? `<span class="site-bubble-time">⏰ ${s.start_time}</span>` : ''}
       </div>
       <div class="site-bubble-arrow">›</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── Arrival ────────────────────────────────────────────────────────────────
@@ -890,6 +896,7 @@ function showPhase(id) {
   document.querySelectorAll('.phase').forEach(p=>p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
+  if (id === 'phaseChecklist') setTimeout(initSigCanvas, 50);
 }
 
 function topAction() { if (currentEmployee) doSignOut(); }
@@ -999,14 +1006,7 @@ function checkSignoffReady() {
   }
 }
 
-// Init canvas after phase is shown
-const _origShowPhase = showPhase;
-function showPhase(id) {
-  _origShowPhase(id);
-  if (id === 'phaseChecklist') {
-    setTimeout(initSigCanvas, 50);
-  }
-}
+// (signature canvas init is handled inside showPhase above)
 </script>
 </body>
 </html>

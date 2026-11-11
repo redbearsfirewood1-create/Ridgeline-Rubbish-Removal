@@ -1051,7 +1051,10 @@ def api_delete_site(site_id):
 def api_sites_today():
     day     = _today_day_abbr()
     emp_id  = session.get('employee_id')
-    all_cfg = load_all_site_configs()
+    all_cfg = load_all_site_configs()          # sites.json  — schedule/enabled data
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}                          # sites_config.json — name/address/start_time
     result  = []
     for sid, t in get_templates().items():
         cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
@@ -1059,19 +1062,23 @@ def api_sites_today():
         if day not in cfg.get('assigned_days', _DAY_NAMES): continue
         assigned = cfg.get('assigned_employees', [])
         if assigned and emp_id and emp_id not in assigned: continue
+        sc = scfg.get(sid, {})
         result.append({
             'id':          sid,
             'name':        t['name'],
             'has_kitchen': t.get('has_kitchen', False),
-            'address':     cfg.get('address', ''),
-            'start_time':  cfg.get('start_time', ''),
+            'address':     sc.get('address', ''),
+            'start_time':  sc.get('start_time', ''),
         })
     return jsonify(result)
 
 @app.route('/api/sites/week')
 def api_sites_week():
     emp_id  = session.get('employee_id')
-    all_cfg = load_all_site_configs()
+    all_cfg = load_all_site_configs()          # sites.json  — schedule/enabled data
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}                          # sites_config.json — name/address/start_time
     week    = {}
     for day in _DAY_NAMES:
         sites = []
@@ -1081,11 +1088,12 @@ def api_sites_week():
             if day not in cfg.get('assigned_days', _DAY_NAMES): continue
             assigned = cfg.get('assigned_employees', [])
             if assigned and emp_id and emp_id not in assigned: continue
+            sc = scfg.get(sid, {})
             sites.append({
                 'id':         sid,
                 'name':       t['name'],
-                'address':    cfg.get('address', ''),
-                'start_time': cfg.get('start_time', ''),
+                'address':    sc.get('address', ''),
+                'start_time': sc.get('start_time', ''),
             })
         week[day] = sites
     return jsonify(week)
