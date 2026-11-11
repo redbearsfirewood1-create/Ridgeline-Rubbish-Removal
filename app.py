@@ -839,12 +839,17 @@ def staff_login():
 
 @app.route('/checklist')
 def checklist_home():
+    emp_id   = session.get('employee_id','')
+    emp_name = session.get('employee_name','')
+    # Admin can also view the checklist; unauthenticated users → staff login
+    if not emp_id and not session.get('logged_in'):
+        return redirect(url_for('staff_login'))
     return render_template('checklist.html',
         templates=get_templates(),
         today=datetime.now().strftime('%Y-%m-%d'),
         day=_today_day_abbr(),
-        session_emp_id=session.get('employee_id',''),
-        session_emp_name=session.get('employee_name','')
+        session_emp_id=emp_id,
+        session_emp_name=emp_name,
     )
 
 @app.route('/checklist/logout')

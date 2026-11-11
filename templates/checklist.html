@@ -268,8 +268,8 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
   <button class="btn-top" id="btnTopAction" onclick="topAction()">Log In</button>
 </div>
 
-<!-- Phase 1: Login -->
-<div class="phase active" id="phaseLogin">
+<!-- Phase 1: Login (only shown when not logged in, e.g. wrong PIN re-render) -->
+<div class="phase {% if not session_emp_id %}active{% endif %}" id="phaseLogin">
   <div class="login-wrap">
     <div class="login-title">🧹 Cleaner Sign In</div>
     <div class="login-sub">Select your name and enter your PIN</div>
@@ -306,7 +306,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 </div>
 
 <!-- Phase 2: My Sites -->
-<div class="phase" id="phaseSites">
+<div class="phase {% if session_emp_id %}active{% endif %}" id="phaseSites">
   <div class="sites-wrap">
     <div class="emp-badge">
       <div class="emp-avatar" id="empAvatar">?</div>
@@ -435,39 +435,27 @@ let weeklyState = {};
 let proofUploaded = {};
 let siteClientMap = {}; // site_id → {client_name, logo_url}
 
-// ── Session injected by Flask (fastest path — no fetch needed) ────────────
-const FLASK_EMP_ID   = '{{ session_emp_id   | default("") }}';
-const FLASK_EMP_NAME = '{{ session_emp_name | default("") }}';
+// ── Session from Flask — tojson ensures safe JS strings (quotes, apostrophes etc) ──
+const FLASK_EMP_ID   = {{ session_emp_id   | tojson }};
+const FLASK_EMP_NAME = {{ session_emp_name | tojson }};
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  loadEmployees();
   // Pre-load site→client mapping
   try {
     const r = await fetch('/api/sites-with-clients');
     if (r.ok) siteClientMap = await r.json();
   } catch(e) {}
 
-  // Use Flask-injected session first (instant, no network call)
   if (FLASK_EMP_ID && FLASK_EMP_NAME) {
+    // Already authenticated — HTML is already showing phaseSites via Jinja
     currentEmployee = {name: FLASK_EMP_NAME, id: FLASK_EMP_ID};
     setEmployeeBadge(FLASK_EMP_NAME);
-    showPhase('phaseSites');
     loadSites();
-    return;
+  } else {
+    // Not logged in — load employee list for the login form
+    loadEmployees();
   }
-
-  // Fallback: check session via API (handles page refreshes)
-  try {
-    const r = await fetch('/api/checklist/session');
-    const d = await r.json();
-    if (d.employee_name) {
-      currentEmployee = {name: d.employee_name, id: d.employee_id};
-      setEmployeeBadge(d.employee_name);
-      showPhase('phaseSites');
-      loadSites();
-    }
-  } catch(e) {}
 });
 
 const FLASK_LOGIN_ERR  = '{{ login_error  | default("") }}';
