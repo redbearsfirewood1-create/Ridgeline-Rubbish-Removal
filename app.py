@@ -779,17 +779,34 @@ def monitor_page():
 @app.route('/checklist/login', methods=['GET','POST'])
 def checklist_login():
     if request.method == 'POST':
-        data = request.get_json() or {}
+        data = request.get_json(force=True, silent=True) or {}
         emp_id  = data.get('id','')
-        pin     = data.get('pin','').strip()
+        pin     = str(data.get('pin','')).strip()
         emps    = load_json(EMPLOYEES_FILE)
-        emp     = next((e for e in emps if e['id']==emp_id and e.get('pin','')==pin and e.get('active',True)), None)
+        emp     = next((e for e in emps if e['id']==emp_id and str(e.get('pin',''))==pin and e.get('active',True)), None)
         if emp:
             session['employee_id']   = emp['id']
             session['employee_name'] = emp['name']
             return jsonify({'ok': True, 'name': emp['name']})
         return jsonify({'error': 'Wrong PIN'}), 401
     return render_template('checklist.html', templates=get_templates(), today=datetime.now().strftime('%Y-%m-%d'), day=_today_day_abbr())
+
+# ── Staff login (separate simple page, form-POST — no JSON/fetch) ─────────────
+@app.route('/staff', methods=['GET','POST'])
+def staff_login():
+    error = ''
+    if request.method == 'POST':
+        emp_id = request.form.get('emp_id','').strip()
+        pin    = request.form.get('pin','').strip()
+        emps   = load_json(EMPLOYEES_FILE)
+        emp    = next((e for e in emps if e['id']==emp_id and str(e.get('pin',''))==pin and e.get('active',True)), None)
+        if emp:
+            session['employee_id']   = emp['id']
+            session['employee_name'] = emp['name']
+            return redirect(url_for('checklist_home'))
+        error = 'Wrong PIN — please try again'
+    active_emps = [e for e in load_json(EMPLOYEES_FILE) if e.get('active', True)]
+    return render_template('staff_login.html', employees=active_emps, error=error)
 
 @app.route('/checklist')
 def checklist_home():

@@ -315,11 +315,12 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 const HAS_MAPS   = {{ 'true' if google_maps_key else 'false' }};
 const REFRESH_SECS = 30;
 
-let map       = null;
-let mapMarkers = [];
-let liveData   = [];
+let map         = null;
+let mapMarkers  = [];
+let liveData    = [];
 let activeEmpId = null;
 let refreshTimeout = null;
+let siteClientMap  = {};   // {site_id: {client_name, logo_url}}
 
 // ── Clock ────────────────────────────────────────────────
 function updateClock() {
@@ -417,8 +418,12 @@ function renderSites(sites) {
   }
   let checked=0, pending=0, yellow=0, red=0;
   sb.innerHTML = sites.map(site => {
-    const overall = siteOverall(site.employees);
+    const overall  = siteOverall(site.employees);
     const startLbl = site.start_time ? `🕐 ${site.start_time}` : '—';
+    const clientInfo = siteClientMap[site.id] || {};
+    const siteIcon = clientInfo.logo_url
+      ? `<img src="${clientInfo.logo_url}" alt="${clientInfo.client_name||''}" style="width:28px;height:28px;object-fit:contain;border-radius:4px;background:#fff;padding:1px;">`
+      : `<span style="font-size:22px;">🍔</span>`;
     const rows = site.employees.map(e => {
       if (e.checked_in) checked++;
       else if (e.status==='yellow') yellow++;
@@ -437,7 +442,7 @@ function renderSites(sites) {
     }).join('');
     return `<div class="site-card">
       <div class="site-card-hdr">
-        <span style="font-size:16px;">🍔</span>
+        ${siteIcon}
         <div class="site-card-name">${site.name}</div>
         <div class="start-badge b-${overall}">${startLbl}</div>
       </div>
@@ -554,9 +559,13 @@ function renderDetailBody(data) {
     const noActivity = !site.arrival_photo && (!site.proof_photos || !site.proof_photos.length)
       ? '<div class="not-checked">No photos uploaded yet</div>' : '';
 
+    const sc = siteClientMap[site.site_id] || {};
+    const siteLogo = sc.logo_url
+      ? `<img src="${sc.logo_url}" style="width:20px;height:20px;object-fit:contain;background:#fff;border-radius:3px;padding:1px;margin-right:5px;vertical-align:middle;">`
+      : '🍔 ';
     return `
       <div class="detail-site">
-        <div class="detail-site-name">🍔 ${site.site_name}</div>
+        <div class="detail-site-name">${siteLogo}${site.site_name}</div>
         ${checkinTime ? `
           <div class="detail-checkin-row">
             <div class="s-dot dot-green"></div>
@@ -632,9 +641,13 @@ function addMarker(site, lat, lng, bounds) {
   const icon  = {path: google.maps.SymbolPath.CIRCLE, scale:14,
                  fillColor:color, fillOpacity:.9, strokeColor:'#fff', strokeWeight:2};
   const marker = new google.maps.Marker({map, position:{lat,lng}, icon, title:site.name});
+  const clientInfo2 = siteClientMap[site.id] || {};
+  const logoHtml = clientInfo2.logo_url
+    ? `<img src="${clientInfo2.logo_url}" style="width:22px;height:22px;object-fit:contain;background:#fff;border-radius:3px;padding:1px;margin-right:6px;vertical-align:middle;">`
+    : '🍔 ';
   const info   = new google.maps.InfoWindow({content:`
     <div style="background:#111;color:#f0f0f0;padding:12px 14px;border-radius:10px;min-width:180px;font-family:Arial,sans-serif;">
-      <strong style="font-size:13px;display:block;margin-bottom:4px;">${site.name}</strong>
+      <strong style="font-size:13px;display:block;margin-bottom:4px;">${logoHtml}${site.name}</strong>
       ${site.start_time?`<span style="font-size:11px;color:#888;">🕐 Start: ${site.start_time}</span><br>`:''}
       ${site.employees.map(e=>`
         <div style="display:flex;flex-direction:column;margin-top:8px;background:#1a1a1a;border-radius:7px;padding:7px 9px;">
@@ -694,6 +707,12 @@ function startRefreshCycle() {
 
 // ── Init ─────────────────────────────────────────────────
 (async () => {
+  // Load site→client map (logos) before first render
+  try {
+    const r = await fetch('/api/sites-with-clients');
+    if (r.ok) siteClientMap = await r.json();
+  } catch(e) {}
+
   await fetchStatus();
   if (!HAS_MAPS) {
     document.getElementById('mapMsg').textContent = 'Add a Google Maps API key in Render to enable the map';

@@ -58,6 +58,9 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .btn-sm{background:#111;border:1px solid #333;color:#ccc;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;}
 .btn-sm:hover{border-color:#3d8b3d;color:#3d8b3d;}
 .btn-sm.red:hover{border-color:#b71c1c;color:#ef5350;}
+.btn-sm.sms{border-color:#1a4a7a;}
+.btn-sm.sms:hover{border-color:#2196f3;color:#2196f3;}
+.btn-sm.sms-off{opacity:.35;cursor:default;}
 .emp-empty{text-align:center;padding:40px 20px;color:#444;}
 
 /* Site config */
@@ -341,6 +344,9 @@ function renderEmployees() {
       <div class="emp-actions">
         <button class="btn-sm" onclick="openEditModal('${e.id}')">Edit</button>
         <button class="btn-sm" onclick="toggleActive('${e.id}', ${e.active!==false})">${e.active===false?'Enable':'Disable'}</button>
+        ${e.mobile
+          ? `<button class="btn-sm sms" onclick="sendLoginSMS('${e.id}','${e.name}','${e.mobile}')">📲 Login Link</button>`
+          : `<button class="btn-sm sms-off" title="Add a mobile number first">📲 No mobile</button>`}
         <button class="btn-sm red" onclick="deleteEmployee('${e.id}')">Delete</button>
       </div>
     </div>`).join('');
@@ -442,6 +448,13 @@ async function toggleActive(empId, currentlyActive) {
     });
     loadEmployees();
   } catch(e) {}
+}
+
+function sendLoginSMS(empId, empName, mobile) {
+  const base = window.location.origin;
+  const url  = `${base}/staff?id=${encodeURIComponent(empId)}`;
+  const msg  = `Hi ${empName}, here's your Ridgeline staff login link: ${url}`;
+  window.location.href = `sms:${mobile}?body=${encodeURIComponent(msg)}`;
 }
 
 async function deleteEmployee(empId) {
