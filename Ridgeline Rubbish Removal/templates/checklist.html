@@ -344,15 +344,18 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
       <div class="arrival-site-name" id="arrivalSiteName">—</div>
     </div>
 
-    <div class="photo-capture" id="arrivalPhotoCapture" onclick="triggerArrivalPhoto()">
-      <img id="arrivalPreview" class="photo-preview" alt="">
-      <div class="photo-placeholder" id="arrivalPlaceholder">
-        <div class="photo-placeholder-icon">📷</div>
-        <div class="photo-placeholder-text">Tap to take arrival photo</div>
+    <label for="arrivalPhotoInput" style="display:block;cursor:pointer;">
+      <div class="photo-capture" id="arrivalPhotoCapture">
+        <img id="arrivalPreview" class="photo-preview" alt="">
+        <div class="photo-placeholder" id="arrivalPlaceholder">
+          <div class="photo-placeholder-icon">📷</div>
+          <div class="photo-placeholder-text">Tap to take arrival photo</div>
+        </div>
       </div>
-      <input type="file" accept="image/*" capture="environment"
-             class="photo-input" id="arrivalPhotoInput" onchange="arrivalPhotoSelected(this)">
-    </div>
+    </label>
+    <input type="file" accept="image/*" capture="environment"
+           id="arrivalPhotoInput" style="display:none;"
+           onchange="arrivalPhotoSelected(this)">
 
     <div class="location-status" id="locationStatus">📍 Getting your location…</div>
 
@@ -636,7 +639,6 @@ function _showClientLogo(clientInfo) {
 }
 
 let arrivalPhotoFile = null;
-function triggerArrivalPhoto() { document.getElementById('arrivalPhotoInput').click(); }
 
 function arrivalPhotoSelected(input) {
   if (!input.files[0]) return;
@@ -670,8 +672,8 @@ function getLocation() {
       checkArrivalReady();
     },
     err => {
-      status.textContent = '📍 Location unavailable — continuing without GPS';
-      status.className = 'location-status err';
+      status.textContent = '📍 No GPS — take photo to continue';
+      status.className = 'location-status';
       gpsData = {lat:'', lng:'', accuracy:''};
       checkArrivalReady();
     },
