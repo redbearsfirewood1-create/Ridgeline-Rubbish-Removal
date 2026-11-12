@@ -39,7 +39,8 @@ TRUCKS_FILE      = os.path.join(DATA_DIR, 'trucks.json')
 EMPLOYEES_FILE   = os.path.join(DATA_DIR, 'employees.json')
 CHECKLISTS_FILE  = os.path.join(DATA_DIR, 'checklists.json')
 ALLOWED_EXT  = {'png','jpg','jpeg','gif','webp','heic'}
-EMP_PHOTOS_DIR = os.path.join(DATA_DIR, 'photos', 'emp_photos')
+EMP_PHOTOS_DIR  = os.path.join(DATA_DIR, 'photos', 'emp_photos')
+SITE_LOGOS_DIR  = os.path.join(DATA_DIR, 'photos', 'site_logos')
 
 # ── Item pricing ──────────────────────────────────────────────────────────────
 ITEM_PRICES = {
@@ -57,7 +58,7 @@ def collection_fee_for_km(km):
     return 50
 
 def ensure_dirs():
-    for d in (DATA_DIR, PHOTOS_DIR, CLIENT_LOGOS_DIR, EMP_PHOTOS_DIR):
+    for d in (DATA_DIR, PHOTOS_DIR, CLIENT_LOGOS_DIR, EMP_PHOTOS_DIR, SITE_LOGOS_DIR):
         os.makedirs(d, exist_ok=True)
 
 def load_json(path):
@@ -978,6 +979,7 @@ def api_get_sites():
     for sid, t in get_templates().items():
         cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
         sc  = scfg.get(sid, {})
+        logo = sc.get('logo', '')
         result.append({
             'id':          sid,
             'name':        t['name'],
@@ -985,6 +987,7 @@ def api_get_sites():
             'is_builtin':  sid in _BASE_TEMPLATES,
             'address':     sc.get('address', ''),
             'start_time':  sc.get('start_time', ''),
+            'logo_url':    f'/site-logos/{logo}' if logo else '',
             **cfg,
         })
     return jsonify(result)
@@ -1007,6 +1010,30 @@ def api_create_site():
     scfg[sid] = {'name': name, 'has_kitchen': has_kitchen}
     with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
     return jsonify({'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'is_builtin': False}), 201
+
+@app.route('/api/sites/<site_id>/logo', methods=['POST'])
+@login_required
+def api_upload_site_logo(site_id):
+    ensure_dirs()
+    f = request.files.get('logo')
+    if not f or not f.filename:
+        return jsonify({'error': 'No file'}), 400
+    ext = f.filename.rsplit('.',1)[1].lower() if '.' in f.filename else 'jpg'
+    fn  = f'site_{site_id}.{ext}'
+    f.save(os.path.join(SITE_LOGOS_DIR, fn))
+    # Save logo filename to sites_config.json
+    try:
+        with open(SITES_CONFIG_FILE) as fp: scfg = json.load(fp)
+    except: scfg = {}
+    if site_id not in scfg: scfg[site_id] = {}
+    scfg[site_id]['logo'] = fn
+    with open(SITES_CONFIG_FILE, 'w') as fp: json.dump(scfg, fp, indent=2)
+    return jsonify({'ok': True, 'logo_url': f'/site-logos/{fn}'})
+
+@app.route('/site-logos/<filename>')
+@employee_or_admin_required
+def serve_site_logo(filename):
+    return send_from_directory(SITE_LOGOS_DIR, filename)
 
 @app.route('/api/sites/<site_id>', methods=['PUT'])
 @login_required
@@ -1063,12 +1090,14 @@ def api_sites_today():
         assigned = cfg.get('assigned_employees', [])
         if assigned and emp_id and emp_id not in assigned: continue
         sc = scfg.get(sid, {})
+        logo = sc.get('logo', '')
         result.append({
             'id':          sid,
             'name':        t['name'],
             'has_kitchen': t.get('has_kitchen', False),
             'address':     sc.get('address', ''),
             'start_time':  sc.get('start_time', ''),
+            'logo_url':    f'/site-logos/{logo}' if logo else '',
         })
     return jsonify(result)
 
@@ -1089,11 +1118,13 @@ def api_sites_week():
             assigned = cfg.get('assigned_employees', [])
             if assigned and emp_id and emp_id not in assigned: continue
             sc = scfg.get(sid, {})
+            logo = sc.get('logo', '')
             sites.append({
                 'id':         sid,
                 'name':       t['name'],
                 'address':    sc.get('address', ''),
                 'start_time': sc.get('start_time', ''),
+                'logo_url':   f'/site-logos/{logo}' if logo else '',
             })
         week[day] = sites
     return jsonify(week)

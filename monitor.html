@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d0d0d">
+<title>Ridgeline — Live Monitor</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;overflow:hidden;}
+
+/* ── Top bar ─────────────────────────────────────────────── */
+.topbar{
+  background:#0a0a0a;border-bottom:1px solid #1a1a1a;
+  padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;
+  position:sticky;top:0;z-index:200;flex-shrink:0;
+}
+.topbar img{height:26px;object-fit:contain;}
+.topbar-title{font-size:14px;font-weight:900;color:#3d8b3d;flex:1;}
+.topbar-clock{font-size:22px;font-weight:900;color:#f0f0f0;letter-spacing:2px;font-variant-numeric:tabular-nums;}
+.topbar-date{font-size:11px;color:#555;margin-left:6px;}
+.btn-back{font-size:12px;color:#555;text-decoration:none;margin-left:8px;}
+.btn-fs{background:#1a1a1a;border:1px solid #2a2a2a;color:#777;font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;margin-left:6px;}
+.btn-fs:hover{color:#ccc;}
+
+/* ── Summary strip ──────────────────────────────────────── */
+.summary{display:flex;gap:0;background:#0a0a0a;border-bottom:1px solid #1a1a1a;flex-shrink:0;}
+.sum-item{flex:1;text-align:center;padding:8px 4px;border-right:1px solid #1a1a1a;}
+.sum-item:last-child{border-right:none;}
+.sum-num{font-size:20px;font-weight:900;}
+.sum-lbl{font-size:9px;color:#444;margin-top:1px;text-transform:uppercase;letter-spacing:.5px;}
+.c-green{color:#4caf50;} .c-yellow{color:#f5a623;} .c-red{color:#e53935;} .c-grey{color:#555;}
+
+/* ── Three-column body ──────────────────────────────────── */
+.body-wrap{
+  display:grid;
+  grid-template-columns:200px 1fr 320px;
+  height:calc(100dvh - 52px - 40px);
+}
+@media(max-width:1000px){
+  .body-wrap{grid-template-columns:160px 1fr 280px;}
+}
+
+/* ── Employee bubbles column ────────────────────────────── */
+.emp-col{
+  background:#0a0a0a;border-right:1px solid #1a1a1a;
+  overflow-y:auto;padding:12px 10px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.emp-col-title{
+  font-size:9px;color:#333;text-transform:uppercase;letter-spacing:1px;
+  margin-bottom:4px;padding:0 2px;
+}
+.emp-bubble{
+  display:flex;align-items:center;gap:10px;
+  background:#111;border:1px solid #1e1e1e;border-radius:12px;
+  padding:10px 10px;cursor:pointer;transition:all .2s;
+  position:relative;
+}
+.emp-bubble:hover{background:#1a1a1a;border-color:#2a2a2a;transform:translateX(2px);}
+.emp-bubble.active{background:#1a2e1a;border-color:#2d5a2d;}
+.emp-avatar{
+  width:38px;height:38px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:900;flex-shrink:0;
+  background:#1a1a1a;border:2px solid #2a2a2a;
+  overflow:hidden;
+}
+.emp-avatar img{width:100%;height:100%;object-fit:cover;}
+.emp-info{flex:1;min-width:0;}
+.emp-name-sm{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.emp-status-sm{font-size:10px;margin-top:2px;}
+.emp-status-dot{
+  width:10px;height:10px;border-radius:50%;position:absolute;
+  top:8px;right:8px;box-shadow:0 0 5px currentColor;
+}
+.dot-green {background:#4caf50;color:#4caf50;}
+.dot-yellow{background:#f5a623;color:#f5a623;}
+.dot-red   {background:#e53935;color:#e53935;}
+.dot-grey  {background:#333;color:#333;box-shadow:none;}
+
+/* ── Map ─────────────────────────────────────────────────── */
+#map{width:100%;height:100%;background:#0d0d0d;position:relative;}
+.map-placeholder{
+  width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;color:#2a2a2a;
+}
+.map-placeholder-icon{font-size:44px;opacity:.4;}
+
+/* ── Right panel (sites list OR employee detail) ─────────── */
+.right-panel{
+  background:#0d0d0d;border-left:1px solid #1a1a1a;
+  overflow-y:auto;position:relative;
+}
+
+/* Sites sidebar */
+.site-card{border-bottom:1px solid #1a1a1a;padding:12px 14px;cursor:default;}
+.site-card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.site-card-name{font-size:13px;font-weight:700;flex:1;line-height:1.2;}
+.start-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;}
+.b-green {background:#1a2e1a;color:#4caf50;border:1px solid #2d5a2d;}
+.b-yellow{background:#2e2a0a;color:#f5a623;border:1px solid #5a4a0a;}
+.b-red   {background:#2a0a0a;color:#e53935;border:1px solid #5a1515;}
+.b-grey  {background:#1a1a1a;color:#555;border:1px solid #2a2a2a;}
+.emp-rows{display:flex;flex-direction:column;gap:5px;}
+.emp-row{display:flex;align-items:center;gap:8px;background:#111;border:1px solid #1e1e1e;border-radius:7px;padding:7px 9px;}
+.s-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:0 0 5px currentColor;}
+.emp-row-name{font-size:12px;font-weight:600;flex:1;}
+.emp-row-time{font-size:10px;color:#555;}
+.emp-row-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.lbl-green{color:#4caf50;} .lbl-yellow{color:#f5a623;} .lbl-red{color:#e53935;} .lbl-grey{color:#444;}
+
+/* ── Employee detail panel ───────────────────────────────── */
+.detail-panel{
+  position:absolute;inset:0;background:#0d0d0d;overflow-y:auto;
+  display:none;flex-direction:column;
+}
+.detail-panel.open{display:flex;}
+.detail-hdr{
+  background:#0a0a0a;border-bottom:1px solid #1a1a1a;
+  padding:14px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;
+  position:sticky;top:0;z-index:10;
+}
+.detail-back{background:none;border:none;color:#3d8b3d;font-size:20px;cursor:pointer;padding:0 4px;}
+.detail-avatar{
+  width:44px;height:44px;border-radius:50%;background:#1a2e1a;border:2px solid #2d5a2d;
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;flex-shrink:0;
+  overflow:hidden;
+}
+.detail-avatar img{width:100%;height:100%;object-fit:cover;}
+/* Mobile contact row */
+.mobile-row{display:flex;gap:8px;align-items:center;margin-top:4px;}
+.btn-call,.btn-sms{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 12px;border-radius:99px;font-size:11px;font-weight:700;text-decoration:none;border:none;cursor:pointer;
+}
+.btn-call{background:#1a2e1a;color:#4caf50;border:1px solid #2d5a2d;}
+.btn-sms {background:#1a1a2e;color:#90caf9;border:1px solid #2a3a60;}
+.detail-name{font-size:16px;font-weight:900;flex:1;}
+.detail-body{padding:16px;display:flex;flex-direction:column;gap:16px;}
+
+.detail-section-title{
+  font-size:10px;color:#3d8b3d;text-transform:uppercase;letter-spacing:1px;font-weight:700;
+  margin-bottom:8px;
+}
+/* Site activity cards */
+.detail-site{background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:12px;}
+.detail-site-name{font-size:13px;font-weight:700;margin-bottom:4px;}
+.detail-site-meta{font-size:11px;color:#555;margin-bottom:10px;}
+.detail-checkin-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.detail-checkin-time{font-size:12px;color:#3d8b3d;font-weight:700;}
+
+/* Arrival photo */
+.arrival-img-wrap{margin-bottom:10px;}
+.arrival-img-label{font-size:10px;color:#555;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
+.arrival-img{
+  width:100%;max-height:160px;object-fit:cover;border-radius:8px;
+  border:1px solid #2a2a2a;cursor:pointer;transition:opacity .2s;
+}
+.arrival-img:hover{opacity:.85;}
+
+/* Proof photos grid */
+.proof-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.proof-item{position:relative;}
+.proof-img{
+  width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;
+  border:1px solid #2a2a2a;cursor:pointer;transition:opacity .2s;
+}
+.proof-img:hover{opacity:.85;}
+.proof-label{
+  position:absolute;bottom:4px;left:4px;right:4px;
+  background:rgba(0,0,0,.7);font-size:9px;color:#ccc;
+  padding:2px 5px;border-radius:4px;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* Not checked in placeholder */
+.not-checked{font-size:12px;color:#333;text-align:center;padding:16px 0;}
+
+/* ── Lightbox ─────────────────────────────────────────────── */
+#lightbox{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:1000;
+  align-items:center;justify-content:center;cursor:pointer;
+}
+#lightbox.open{display:flex;}
+#lightbox img{max-width:94vw;max-height:92vh;border-radius:8px;object-fit:contain;}
+
+/* ── Refresh bar ─────────────────────────────────────────── */
+.refresh-bar{position:fixed;bottom:0;left:0;right:0;height:3px;background:#1a1a1a;z-index:300;}
+.refresh-progress{height:100%;background:#3d8b3d;width:0%;transition:width linear;}
+
+/* ── Ridgeline loaders ───────────────────────────────────── */
+@keyframes rl-spin    { to { transform:rotate(360deg) } }
+@keyframes rl-spin-r  { to { transform:rotate(-360deg) } }
+@keyframes rl-glow    { 0%,100%{opacity:.35;transform:scale(1)} 50%{opacity:.9;transform:scale(1.45)} }
+@keyframes rl-breath  { 0%,100%{opacity:.82;transform:scale(1)} 50%{opacity:1;transform:scale(1.04)} }
+@keyframes rl-bounce  { 0%,80%,100%{transform:scale(.7);opacity:.3} 40%{transform:scale(1.25);opacity:1} }
+@keyframes rl-fade-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes rl-scan    { 0%{left:-40%} 100%{left:110%} }
+#rl-page-loader{position:fixed;inset:0;background:#0d0d0d;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;opacity:0;pointer-events:none;transition:opacity .28s ease;}
+#rl-page-loader.rl-show{opacity:1;pointer-events:all;}
+.rl-logo-wrap{position:relative;width:280px;height:168px;display:flex;align-items:center;justify-content:center;}
+.rl-oval-1{position:absolute;inset:-18px;border-radius:50%;border:2px solid transparent;border-top-color:#3d8b3d;border-right-color:#3d8b3d;box-shadow:0 0 12px rgba(61,139,61,.25);animation:rl-spin 1.6s cubic-bezier(.5,0,.5,1) infinite;}
+.rl-oval-2{position:absolute;inset:-6px;border-radius:50%;border:1.5px solid transparent;border-bottom-color:#2a5c2a;border-left-color:#2a5c2a;animation:rl-spin-r .9s linear infinite;}
+.rl-glow-bg{position:absolute;width:230px;height:120px;background:radial-gradient(ellipse at center,rgba(61,139,61,.2) 0%,transparent 70%);animation:rl-glow 2.8s ease-in-out infinite;pointer-events:none;}
+.rl-logo-img{position:relative;width:220px;object-fit:contain;animation:rl-breath 2.8s ease-in-out infinite;filter:drop-shadow(0 0 8px rgba(61,139,61,.18));}
+.rl-scan-wrap{position:absolute;inset:0;border-radius:50%;overflow:hidden;pointer-events:none;}
+.rl-scan-line{position:absolute;top:0;bottom:0;width:35%;background:linear-gradient(90deg,transparent,rgba(61,139,61,.12),transparent);animation:rl-scan 2.2s linear infinite;}
+.rl-dots{display:flex;gap:9px;align-items:center;}
+.rl-dot{width:7px;height:7px;border-radius:50%;background:#3d8b3d;animation:rl-bounce 1.3s ease-in-out infinite;}
+.rl-dot:nth-child(1){animation-delay:0s} .rl-dot:nth-child(2){animation-delay:.18s;background:#2d6b2d;} .rl-dot:nth-child(3){animation-delay:.36s;background:#1f4c1f;}
+.rl-ring-sm{width:22px;height:22px;border:2px solid #1e1e1e;border-top-color:#3d8b3d;border-radius:50%;animation:rl-spin .75s linear infinite;flex-shrink:0;}
+.rl-loading{display:flex;align-items:center;justify-content:center;gap:12px;color:#555;font-size:13px;padding:36px 16px;}
+/* ───────────────────────────────────────────────────────── */
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <div class="topbar-title">📡 Live Monitor</div>
+  <div>
+    <span class="topbar-clock" id="clock">--:--</span>
+    <span class="topbar-date" id="dateLabel"></span>
+  </div>
+  <button class="btn-fs" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+  <a href="/home" class="btn-back">← Home</a>
+</div>
+
+<!-- Summary strip -->
+<div class="summary">
+  <div class="sum-item"><div class="sum-num c-green"  id="sumChecked">0</div><div class="sum-lbl">Checked In</div></div>
+  <div class="sum-item"><div class="sum-num c-grey"   id="sumPending">0</div><div class="sum-lbl">Not Started</div></div>
+  <div class="sum-item"><div class="sum-num c-yellow" id="sumYellow">0</div><div class="sum-lbl">Running Late</div></div>
+  <div class="sum-item"><div class="sum-num c-red"    id="sumRed">0</div><div class="sum-lbl">Overdue</div></div>
+  <div class="sum-item"><div class="sum-num" style="color:#3d8b3d;" id="sumSites">0</div><div class="sum-lbl">Sites Today</div></div>
+</div>
+
+<!-- Three-column body -->
+<div class="body-wrap">
+
+  <!-- Left: Employee bubbles -->
+  <div class="emp-col" id="empCol">
+    <div class="emp-col-title">Team</div>
+    <div class="rl-loading"><div class="rl-ring-sm"></div></div>
+  </div>
+
+  <!-- Centre: Map -->
+  <div id="map">
+    <div class="map-placeholder" id="mapPlaceholder">
+      <div class="map-placeholder-icon">🗺️</div>
+      <div style="font-size:12px;color:#333;" id="mapMsg">Loading map…</div>
+    </div>
+  </div>
+
+  <!-- Right: Site cards + Employee detail overlay -->
+  <div class="right-panel" id="rightPanel">
+    <div id="siteSidebar">
+      <div class="rl-loading"><div class="rl-ring-sm"></div>Loading…</div>
+    </div>
+
+    <!-- Employee detail slides over the site list -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-hdr">
+        <button class="detail-back" onclick="closeDetail()">‹</button>
+        <div class="detail-avatar" id="detailAvatar">?</div>
+        <div class="detail-name" id="detailName">—</div>
+        <div id="detailStatusDot" class="emp-status-dot dot-grey" style="position:static;margin-left:auto;"></div>
+      </div>
+      <div class="detail-body" id="detailBody">
+        <div class="rl-loading"><div class="rl-ring-sm"></div>Loading activity…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- Refresh bar -->
+<div class="refresh-bar"><div class="refresh-progress" id="refreshBar"></div></div>
+
+<!-- Page loader -->
+<div id="rl-page-loader">
+  <div class="rl-logo-wrap">
+    <div class="rl-oval-1"></div><div class="rl-oval-2"></div>
+    <div class="rl-glow-bg"></div>
+    <div class="rl-scan-wrap"><div class="rl-scan-line"></div></div>
+    <img class="rl-logo-img" src="/static/logo.png" alt="Ridgeline">
+  </div>
+  <div class="rl-dots"><div class="rl-dot"></div><div class="rl-dot"></div><div class="rl-dot"></div></div>
+</div>
+<script>
+(function(){
+  var L=document.getElementById('rl-page-loader');
+  if(!L) return;
+  document.addEventListener('click',function(e){
+    var a=e.target.closest('a');
+    if(!a||!a.href) return;
+    try{ var u=new URL(a.href); if(u.origin!==location.origin||a.target==='_blank') return; }catch(e){return;}
+    L.classList.add('rl-show');
+  });
+  window.addEventListener('pageshow',function(){L.classList.remove('rl-show');});
+})();
+</script>
+
+{% if google_maps_key %}
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap"></script>
+{% endif %}
+
+<script>
+const HAS_MAPS   = {{ 'true' if google_maps_key else 'false' }};
+const REFRESH_SECS = 30;
+
+let map         = null;
+let mapMarkers  = [];
+let liveData    = [];
+let activeEmpId = null;
+let refreshTimeout = null;
+let siteClientMap  = {};   // {site_id: {client_name, logo_url}}
+
+// ── Clock ────────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false});
+  document.getElementById('dateLabel').textContent =
+    n.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+}
+setInterval(updateClock, 1000); updateClock();
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+}
+
+// ── Status helpers ───────────────────────────────────────
+const STATUS_COLORS = {green:'#4caf50', yellow:'#f5a623', red:'#e53935', pending:'#333'};
+function overallEmpStatus(sites) {
+  // Across all sites an employee is assigned to today
+  const all = liveData.flatMap(s => s.employees.filter(e => e.id === activeEmpId || true));
+  return 'green';
+}
+function siteOverall(emps) {
+  if (!emps.length) return 'pending';
+  if (emps.some(e=>e.status==='red'))    return 'red';
+  if (emps.some(e=>e.status==='yellow')) return 'yellow';
+  if (emps.every(e=>e.checked_in))       return 'green';
+  return 'pending';
+}
+function empOverallStatus(empId) {
+  let best = 'pending';
+  for (const site of liveData) {
+    const emp = site.employees.find(e => e.id === empId);
+    if (!emp) continue;
+    if (emp.checked_in)             return 'green';
+    if (emp.status === 'red')       best = 'red';
+    else if (emp.status === 'yellow' && best !== 'red') best = 'yellow';
+  }
+  return best;
+}
+
+// ── Render employee bubbles ──────────────────────────────
+function renderEmpBubbles(sites) {
+  const col  = document.getElementById('empCol');
+  // Collect unique employees across all today's sites
+  const seen = {};
+  for (const site of sites) {
+    for (const emp of site.employees) {
+      if (!seen[emp.id]) seen[emp.id] = {id: emp.id, name: emp.name, mobile: emp.mobile||'', photo: emp.photo||'', status: 'pending'};
+      if (emp.checked_in) seen[emp.id].status = 'green';
+      else if (emp.status === 'red'    && seen[emp.id].status !== 'green') seen[emp.id].status = 'red';
+      else if (emp.status === 'yellow' && seen[emp.id].status === 'pending') seen[emp.id].status = 'yellow';
+    }
+  }
+  const emps = Object.values(seen);
+  if (!emps.length) {
+    col.innerHTML = '<div class="emp-col-title">Team</div><div style="font-size:11px;color:#333;padding:12px 4px;">No employees today</div>';
+    return;
+  }
+
+  col.innerHTML = '<div class="emp-col-title">Team</div>' + emps.map(emp => {
+    const statusLabel = emp.status === 'green' ? 'On site'
+                      : emp.status === 'red'   ? 'Overdue'
+                      : emp.status === 'yellow' ? 'Late'
+                      : 'Not started';
+    const colorStyle = emp.status === 'green'  ? 'color:#4caf50'
+                     : emp.status === 'red'    ? 'color:#e53935'
+                     : emp.status === 'yellow' ? 'color:#f5a623'
+                     : 'color:#444';
+    const avatarBg = emp.status === 'green' ? '#1a2e1a'
+                   : emp.status === 'red'   ? '#2a0a0a'
+                   : '#1a1a1a';
+    const avatarInner = emp.photo
+      ? `<img src="${emp.photo}" alt="${emp.name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+      : emp.name[0].toUpperCase();
+    return `
+      <div class="emp-bubble ${activeEmpId===emp.id?'active':''}" onclick="openDetail('${emp.id}','${emp.name}','${emp.status}')">
+        <div class="emp-avatar" style="background:${avatarBg};">${avatarInner}</div>
+        <div class="emp-info">
+          <div class="emp-name-sm">${emp.name.split(' ')[0]}</div>
+          <div class="emp-status-sm" style="${colorStyle}">${statusLabel}</div>
+        </div>
+        <div class="emp-status-dot dot-${emp.status}"></div>
+      </div>`;
+  }).join('');
+}
+
+// ── Render site cards ────────────────────────────────────
+function renderSites(sites) {
+  const sb = document.getElementById('siteSidebar');
+  if (!sites.length) {
+    sb.innerHTML = '<div style="padding:30px 16px;text-align:center;color:#2a2a2a;font-size:12px;">No sites scheduled today</div>';
+    return;
+  }
+  let checked=0, pending=0, yellow=0, red=0;
+  sb.innerHTML = sites.map(site => {
+    const overall  = siteOverall(site.employees);
+    const startLbl = site.start_time ? `🕐 ${site.start_time}` : '—';
+    const clientInfo = siteClientMap[site.id] || {};
+    const siteIcon = clientInfo.logo_url
+      ? `<img src="${clientInfo.logo_url}" alt="${clientInfo.client_name||''}" style="width:28px;height:28px;object-fit:contain;border-radius:4px;background:#fff;padding:1px;">`
+      : `<span style="font-size:22px;">🍔</span>`;
+    const rows = site.employees.map(e => {
+      if (e.checked_in) checked++;
+      else if (e.status==='yellow') yellow++;
+      else if (e.status==='red')    red++;
+      else                          pending++;
+      const timeStr = e.checked_in
+        ? new Date(e.arrival_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false})
+        : '';
+      const lbl = e.checked_in ? 'In' : e.status==='red' ? 'Overdue' : e.status==='yellow' ? 'Late' : '—';
+      return `<div class="emp-row">
+        <div class="s-dot dot-${e.checked_in?'green':e.status}"></div>
+        <div class="emp-row-name">${e.name}</div>
+        ${timeStr?`<div class="emp-row-time">${timeStr}</div>`:''}
+        <div class="emp-row-lbl lbl-${e.checked_in?'green':e.status}">${lbl}</div>
+      </div>`;
+    }).join('');
+    return `<div class="site-card">
+      <div class="site-card-hdr">
+        ${siteIcon}
+        <div class="site-card-name">${site.name}</div>
+        <div class="start-badge b-${overall}">${startLbl}</div>
+      </div>
+      <div class="emp-rows">${rows || '<div class="not-checked">No employees assigned</div>'}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('sumChecked').textContent = checked;
+  document.getElementById('sumPending').textContent = pending;
+  document.getElementById('sumYellow').textContent  = yellow;
+  document.getElementById('sumRed').textContent     = red;
+  document.getElementById('sumSites').textContent   = sites.length;
+}
+
+// ── Employee detail panel ────────────────────────────────
+async function openDetail(empId, empName, empStatus) {
+  activeEmpId = empId;
+  // Highlight bubble
+  document.querySelectorAll('.emp-bubble').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.emp-bubble').forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${empId}'`)) b.classList.add('active');
+  });
+
+  // Find cached employee data for photo/mobile
+  const cachedEmp = Object.values(
+    liveData.flatMap(s => s.employees).reduce((acc, e) => { acc[e.id]=e; return acc; }, {})
+  ).find(e => e.id === empId) || {};
+
+  // Set avatar
+  const av = document.getElementById('detailAvatar');
+  if (cachedEmp.photo) {
+    av.innerHTML = `<img src="${cachedEmp.photo}" alt="${empName}" style="width:100%;height:100%;object-fit:cover;">`;
+  } else {
+    av.textContent = empName[0].toUpperCase();
+  }
+
+  document.getElementById('detailName').textContent = empName;
+  const dot = document.getElementById('detailStatusDot');
+  dot.className = `emp-status-dot dot-${empStatus}`;
+
+  // Mobile contact buttons
+  const mobileHtml = cachedEmp.mobile ? `
+    <div class="mobile-row">
+      <a href="tel:${cachedEmp.mobile}" class="btn-call">📞 Call</a>
+      <a href="sms:${cachedEmp.mobile}" class="btn-sms">💬 SMS</a>
+      <span style="font-size:11px;color:#555;">${cachedEmp.mobile}</span>
+    </div>` : '';
+
+  // Insert mobile below name in header
+  let hdr = document.getElementById('detailHdrExtra');
+  if (!hdr) {
+    hdr = document.createElement('div');
+    hdr.id = 'detailHdrExtra';
+    document.getElementById('detailName').after(hdr);
+  }
+  hdr.innerHTML = mobileHtml;
+
+  document.getElementById('detailBody').innerHTML =
+    '<div class="rl-loading"><div class="rl-ring-sm"></div>Loading activity…</div>';
+  document.getElementById('detailPanel').classList.add('open');
+
+  try {
+    const r = await fetch(`/api/employee/${empId}/today`);
+    const d = await r.json();
+    renderDetailBody(d);
+  } catch(e) {
+    document.getElementById('detailBody').innerHTML =
+      '<div class="not-checked">Could not load activity</div>';
+  }
+}
+
+function closeDetail() {
+  activeEmpId = null;
+  document.getElementById('detailPanel').classList.remove('open');
+  document.querySelectorAll('.emp-bubble').forEach(b => b.classList.remove('active'));
+}
+
+function renderDetailBody(data) {
+  const body = document.getElementById('detailBody');
+  if (!data.sites || !data.sites.length) {
+    body.innerHTML = '<div class="not-checked" style="padding:30px 0;">No activity recorded today</div>';
+    return;
+  }
+
+  body.innerHTML = data.sites.map(site => {
+    const checkinTime = site.arrival_time
+      ? new Date(site.arrival_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false})
+      : null;
+    const pct = site.total_tasks > 0 ? Math.round(site.done_tasks / site.total_tasks * 100) : 0;
+    const pctColor = pct >= 80 ? '#4caf50' : pct >= 40 ? '#f5a623' : '#e53935';
+
+    // Arrival photo
+    const arrivalHtml = site.arrival_photo ? `
+      <div class="arrival-img-wrap">
+        <div class="arrival-img-label">📸 Arrival Photo</div>
+        <img class="arrival-img" src="${site.arrival_photo}" alt="Arrival"
+             onclick="openLightbox('${site.arrival_photo}')">
+      </div>` : '';
+
+    // Proof photos grid
+    const proofHtml = site.proof_photos && site.proof_photos.length ? `
+      <div>
+        <div class="detail-section-title" style="margin-bottom:6px;">📷 Proof Photos</div>
+        <div class="proof-grid">
+          ${site.proof_photos.map(p => `
+            <div class="proof-item">
+              <img class="proof-img" src="${p.url}" alt="${p.key}"
+                   onclick="openLightbox('${p.url}')">
+              <div class="proof-label">${p.key.replace(/_/g,' ')}</div>
+            </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    const noActivity = !site.arrival_photo && (!site.proof_photos || !site.proof_photos.length)
+      ? '<div class="not-checked">No photos uploaded yet</div>' : '';
+
+    const sc = siteClientMap[site.site_id] || {};
+    const siteLogo = sc.logo_url
+      ? `<img src="${sc.logo_url}" style="width:20px;height:20px;object-fit:contain;background:#fff;border-radius:3px;padding:1px;margin-right:5px;vertical-align:middle;">`
+      : '🍔 ';
+    return `
+      <div class="detail-site">
+        <div class="detail-site-name">${siteLogo}${site.site_name}</div>
+        ${checkinTime ? `
+          <div class="detail-checkin-row">
+            <div class="s-dot dot-green"></div>
+            <div class="detail-checkin-time">Checked in ${checkinTime}</div>
+            ${site.total_tasks > 0 ? `<div style="margin-left:auto;font-size:11px;font-weight:700;color:${pctColor}">${pct}% done</div>` : ''}
+          </div>` : `<div class="detail-site-meta" style="color:#e53935;">Not checked in</div>`}
+        ${arrivalHtml}
+        ${proofHtml}
+        ${noActivity}
+      </div>`;
+  }).join('');
+}
+
+// ── Lightbox ─────────────────────────────────────────────
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightboxImg').src = '';
+}
+
+// ── Google Maps ──────────────────────────────────────────
+function initMap() {
+  document.getElementById('mapPlaceholder').style.display = 'none';
+  map = new google.maps.Map(document.getElementById('map'), {
+    zoom: 11,
+    center: {lat:-33.75, lng:150.90},
+    mapTypeId: 'roadmap',
+    styles: [
+      {elementType:'geometry',stylers:[{color:'#1a1a2e'}]},
+      {elementType:'labels.text.fill',stylers:[{color:'#8c8c8c'}]},
+      {elementType:'labels.text.stroke',stylers:[{color:'#1a1a2e'}]},
+      {featureType:'road',elementType:'geometry',stylers:[{color:'#2a2a2a'}]},
+      {featureType:'road',elementType:'geometry.stroke',stylers:[{color:'#1a1a1a'}]},
+      {featureType:'water',elementType:'geometry',stylers:[{color:'#0d1b2a'}]},
+      {featureType:'poi',stylers:[{visibility:'off'}]},
+      {featureType:'transit',stylers:[{visibility:'off'}]},
+    ],
+  });
+  if (liveData.length) updateMapMarkers(liveData);
+}
+
+function updateMapMarkers(sites) {
+  if (!map) return;
+  mapMarkers.forEach(m => m.setMap(null));
+  mapMarkers = [];
+  const bounds = new google.maps.LatLngBounds();
+  let hasPoints = false;
+
+  sites.forEach(site => {
+    const checkedEmp = site.employees.find(e => e.checked_in && e.lat && e.lng);
+    if (checkedEmp) {
+      addMarker(site, parseFloat(checkedEmp.lat), parseFloat(checkedEmp.lng), bounds);
+      hasPoints = true;
+    } else if (site.address) {
+      new google.maps.Geocoder().geocode({address: site.address}, (res, status) => {
+        if (status === 'OK' && res[0]) {
+          const pos = res[0].geometry.location;
+          addMarker(site, pos.lat(), pos.lng(), bounds);
+          map.fitBounds(bounds);
+        }
+      });
+    }
+  });
+  if (hasPoints) map.fitBounds(bounds);
+}
+
+function addMarker(site, lat, lng, bounds) {
+  const ov    = siteOverall(site.employees);
+  const color = ov==='green' ? '#4caf50' : ov==='yellow' ? '#f5a623' : ov==='red' ? '#e53935' : '#555';
+  const icon  = {path: google.maps.SymbolPath.CIRCLE, scale:14,
+                 fillColor:color, fillOpacity:.9, strokeColor:'#fff', strokeWeight:2};
+  const marker = new google.maps.Marker({map, position:{lat,lng}, icon, title:site.name});
+  const clientInfo2 = siteClientMap[site.id] || {};
+  const logoHtml = clientInfo2.logo_url
+    ? `<img src="${clientInfo2.logo_url}" style="width:22px;height:22px;object-fit:contain;background:#fff;border-radius:3px;padding:1px;margin-right:6px;vertical-align:middle;">`
+    : '🍔 ';
+  const info   = new google.maps.InfoWindow({content:`
+    <div style="background:#111;color:#f0f0f0;padding:12px 14px;border-radius:10px;min-width:180px;font-family:Arial,sans-serif;">
+      <strong style="font-size:13px;display:block;margin-bottom:4px;">${logoHtml}${site.name}</strong>
+      ${site.start_time?`<span style="font-size:11px;color:#888;">🕐 Start: ${site.start_time}</span><br>`:''}
+      ${site.employees.map(e=>`
+        <div style="display:flex;flex-direction:column;margin-top:8px;background:#1a1a1a;border-radius:7px;padding:7px 9px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            ${e.photo ? `<img src="${e.photo}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;">` :
+              `<div style="width:26px;height:26px;border-radius:50%;background:#1a2e1a;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;">${e.name[0]}</div>`}
+            <div>
+              <div style="font-size:12px;font-weight:700;">${e.name}</div>
+              <div style="display:flex;align-items:center;gap:4px;margin-top:1px;">
+                <span style="width:7px;height:7px;border-radius:50%;background:${e.checked_in?'#4caf50':e.status==='red'?'#e53935':e.status==='yellow'?'#f5a623':'#555'};display:inline-block;"></span>
+                <span style="font-size:10px;color:${e.checked_in?'#4caf50':e.status==='red'?'#e53935':e.status==='yellow'?'#f5a623':'#777'};">${e.checked_in?'On site':e.status==='red'?'Overdue':e.status==='yellow'?'Late':'Not started'}</span>
+              </div>
+            </div>
+          </div>
+          ${e.mobile ? `
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <a href="tel:${e.mobile}" style="flex:1;text-align:center;background:#1a2e1a;color:#4caf50;padding:4px;border-radius:5px;font-size:10px;font-weight:700;text-decoration:none;">📞 Call</a>
+            <a href="sms:${e.mobile}" style="flex:1;text-align:center;background:#1a1a2e;color:#90caf9;padding:4px;border-radius:5px;font-size:10px;font-weight:700;text-decoration:none;">💬 SMS</a>
+          </div>` : ''}
+        </div>`).join('')}
+    </div>`});
+  marker.addListener('click', () => info.open(map, marker));
+  mapMarkers.push(marker);
+  bounds.extend({lat, lng});
+}
+
+// ── Fetch data ───────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const r   = await fetch('/api/live-status');
+    const d   = await r.json();
+    liveData  = d.sites || [];
+    renderSites(liveData);
+    renderEmpBubbles(liveData);
+    if (map) updateMapMarkers(liveData);
+    // Refresh detail if open
+    if (activeEmpId) {
+      const emp = liveData.flatMap(s=>s.employees).find(e=>e.id===activeEmpId);
+      if (emp) {
+        const r2 = await fetch(`/api/employee/${activeEmpId}/today`);
+        if (r2.ok) renderDetailBody(await r2.json());
+      }
+    }
+  } catch(e) {}
+}
+
+function startRefreshCycle() {
+  const bar = document.getElementById('refreshBar');
+  bar.style.transition = `width ${REFRESH_SECS}s linear`;
+  bar.style.width = '100%';
+  refreshTimeout = setTimeout(async () => {
+    await fetchStatus();
+    bar.style.transition = 'none'; bar.style.width = '0%';
+    setTimeout(startRefreshCycle, 100);
+  }, REFRESH_SECS * 1000);
+}
+
+// ── Init ─────────────────────────────────────────────────
+(async () => {
+  // Load site→client map (logos) before first render
+  try {
+    const r = await fetch('/api/sites-with-clients');
+    if (r.ok) siteClientMap = await r.json();
+  } catch(e) {}
+
+  await fetchStatus();
+  if (!HAS_MAPS) {
+    document.getElementById('mapMsg').textContent = 'Add a Google Maps API key in Render to enable the map';
+  }
+  startRefreshCycle();
+})();
+</script>
+</body>
+</html>
