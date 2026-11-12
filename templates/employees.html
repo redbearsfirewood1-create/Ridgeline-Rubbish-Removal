@@ -491,7 +491,7 @@ function renderSites() {
 
     card.innerHTML = `
       <div class="site-card-header">
-        <div class="site-icon">🍔</div>
+        <div class="site-icon">${site.logo_url ? `<img src="${site.logo_url}" style="width:36px;height:36px;object-fit:contain;border-radius:6px;">` : '🍔'}</div>
         <div class="site-info">
           <strong>${site.name}</strong>
           <span>${site.id}</span>
@@ -525,6 +525,21 @@ function renderSites() {
           <div style="font-size:11px;color:#888;margin-bottom:4px;">🕐 Scheduled Start Time</div>
           <input id="siteStart-${site.id}" type="time" value="${site.start_time||''}"
                  style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:#888;margin-bottom:6px;">🖼️ Site Logo</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img id="siteLogo-${site.id}" src="${site.logo_url||''}"
+               style="width:44px;height:44px;object-fit:contain;border-radius:8px;background:#111;border:1px solid #333;${site.logo_url?'':'display:none;'}">
+          <label style="cursor:pointer;background:#1a1a1a;border:1px solid #444;color:#ccc;
+                        font-size:13px;padding:8px 14px;border-radius:8px;white-space:nowrap;">
+            Upload Logo
+            <input type="file" accept="image/*" style="display:none;"
+                   onchange="uploadSiteLogo('${site.id}', this)">
+          </label>
+          <span id="siteLogoStatus-${site.id}" style="font-size:12px;color:#888;"></span>
         </div>
       </div>
 
@@ -580,6 +595,31 @@ function empCheckChanged(siteId) {
     return cb && cb.checked;
   });
   if (allCb) allCb.checked = !anyChecked;
+}
+
+async function uploadSiteLogo(siteId, input) {
+  if (!input.files[0]) return;
+  const statusEl = document.getElementById(`siteLogoStatus-${siteId}`);
+  statusEl.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('logo', input.files[0]);
+  try {
+    const r = await fetch(`/api/sites/${siteId}/logo`, {method:'POST', body:fd});
+    const d = await r.json();
+    if (r.ok) {
+      statusEl.textContent = '✅ Saved';
+      statusEl.style.color = '#4caf50';
+      const img = document.getElementById(`siteLogo-${siteId}`);
+      img.src = d.logo_url + '?t=' + Date.now();
+      img.style.display = 'block';
+    } else {
+      statusEl.textContent = '❌ ' + (d.error || 'Error');
+      statusEl.style.color = '#ef5350';
+    }
+  } catch(e) {
+    statusEl.textContent = '❌ Network error';
+    statusEl.style.color = '#ef5350';
+  }
 }
 
 async function saveSite(siteId) {
