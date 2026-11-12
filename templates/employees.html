@@ -260,6 +260,18 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
           </select>
         </div>
       </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:#888;margin-bottom:6px;">🖼️ Site Logo <span style="color:#555;">(optional)</span></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img id="newSiteLogoPreview" style="width:44px;height:44px;object-fit:contain;border-radius:8px;background:#111;border:1px solid #333;display:none;">
+          <label style="cursor:pointer;background:#1a1a1a;border:1px solid #444;color:#ccc;font-size:13px;padding:8px 14px;border-radius:8px;white-space:nowrap;">
+            Choose Logo
+            <input type="file" accept="image/*" id="newSiteLogoFile" style="display:none;"
+                   onchange="const f=this.files[0];if(f){const img=document.getElementById('newSiteLogoPreview');img.src=URL.createObjectURL(f);img.style.display='block';}">
+          </label>
+          <span id="newSiteLogoName" style="font-size:12px;color:#666;"></span>
+        </div>
+      </div>
       <button onclick="addSite()" style="background:#3d8b3d;border:none;color:#fff;font-size:14px;font-weight:700;padding:11px 24px;border-radius:10px;cursor:pointer;">Add Site</button>
     </div>
 
@@ -681,8 +693,18 @@ async function addSite() {
       body: JSON.stringify({name, has_kitchen})
     });
     if (!r.ok) { const d = await r.json(); alert(d.error || 'Error creating site'); return; }
+    const newSite = await r.json();
+    // Upload logo if one was selected
+    const logoFile = document.getElementById('newSiteLogoFile').files[0];
+    if (logoFile && newSite.id) {
+      const fd = new FormData(); fd.append('logo', logoFile);
+      await fetch(`/api/sites/${newSite.id}/logo`, {method:'POST', body:fd});
+    }
+    // Reset form
     document.getElementById('newSiteName').value = '';
     document.getElementById('newSiteKitchen').value = 'false';
+    document.getElementById('newSiteLogoFile').value = '';
+    document.getElementById('newSiteLogoPreview').style.display = 'none';
     await loadSites();
   } catch(e) { alert('Error creating site'); }
 }
