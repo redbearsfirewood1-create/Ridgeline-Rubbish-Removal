@@ -94,7 +94,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .photo-placeholder{text-align:center;padding:32px 20px;}
 .photo-placeholder-icon{font-size:48px;margin-bottom:10px;}
 .photo-placeholder-text{font-size:14px;color:#666;}
-.photo-input{display:none;}
+.photo-capture input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
 
 .location-status{font-size:12px;padding:10px 14px;border-radius:10px;margin-bottom:16px;background:#1a1a1a;border:1px solid #2a2a2a;color:#888;}
 .location-status.got{border-color:#3d8b3d;color:#4caf50;}
@@ -344,22 +344,21 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
       <div class="arrival-site-name" id="arrivalSiteName">—</div>
     </div>
 
-    <label for="arrivalPhotoInput" style="display:block;cursor:pointer;">
+    <label style="display:block;cursor:pointer;">
       <div class="photo-capture" id="arrivalPhotoCapture">
         <img id="arrivalPreview" class="photo-preview" alt="">
         <div class="photo-placeholder" id="arrivalPlaceholder">
           <div class="photo-placeholder-icon">📷</div>
           <div class="photo-placeholder-text">Tap to take arrival photo</div>
         </div>
+        <input type="file" accept="image/*" capture="environment" id="arrivalPhotoInput"
+               onchange="arrivalPhotoSelected(this); this.value='';">
       </div>
     </label>
-    <input type="file" accept="image/*" capture="environment"
-           id="arrivalPhotoInput" style="display:none;"
-           onchange="arrivalPhotoSelected(this)">
 
     <div class="location-status" id="locationStatus">📍 Getting your location…</div>
 
-    <button class="btn-primary" id="btnConfirmArrival" onclick="confirmArrival()" disabled>
+    <button class="btn-primary" id="btnConfirmArrival" onclick="confirmArrival()">
       Confirm Arrival & Start Checklist
     </button>
   </div>
@@ -641,14 +640,14 @@ function _showClientLogo(clientInfo) {
 let arrivalPhotoFile = null;
 
 function arrivalPhotoSelected(input) {
-  if (!input.files[0]) return;
-  arrivalPhotoFile = input.files[0];
-  const url = URL.createObjectURL(arrivalPhotoFile);
+  const file = input.files && input.files[0];
+  if (!file) return;
+  arrivalPhotoFile = file;
+  const url = URL.createObjectURL(file);
   const preview = document.getElementById('arrivalPreview');
   preview.src = url; preview.style.display = 'block';
   document.getElementById('arrivalPlaceholder').style.display = 'none';
   document.getElementById('arrivalPhotoCapture').classList.add('has-photo');
-  checkArrivalReady();
 }
 
 function getLocation() {
@@ -682,8 +681,7 @@ function getLocation() {
 }
 
 function checkArrivalReady() {
-  // Can confirm once photo taken (location is optional)
-  document.getElementById('btnConfirmArrival').disabled = !arrivalPhotoFile;
+  // Button is always enabled — photo is recorded if taken, not required to proceed
 }
 
 async function confirmArrival() {
@@ -935,7 +933,7 @@ function goToSites() {
   document.getElementById('arrivalPreview').style.display='none';
   document.getElementById('arrivalPlaceholder').style.display='block';
   document.getElementById('arrivalPhotoCapture').classList.remove('has-photo');
-  document.getElementById('btnConfirmArrival').disabled = true;
+  document.getElementById('btnConfirmArrival').textContent = 'Confirm Arrival & Start Checklist';
   document.getElementById('locationStatus').textContent='📍 Getting your location…';
   document.getElementById('locationStatus').className='location-status';
   clearSig();
