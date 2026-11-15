@@ -612,8 +612,78 @@ function startSite(idx) {
     : clientInfo;
   _showClientLogo(effectiveLogo);
 
+  // Check if employee was mid-checklist for this site today
+  const saved = loadSavedProgress();
+  if (saved && saved.arrivalId && saved.taskState) {
+    // Restore in-progress checklist — skip arrival
+    currentArrivalId = saved.arrivalId;
+    arrivalSaved = true;
+    _resumeChecklist(saved);
+    return;
+  }
+
   showPhase('phaseArrival');
   getLocation();
+}
+
+async function _resumeChecklist(saved) {
+  try {
+    const d = new Date(TODAY + 'T12:00:00');
+    const dayAbbr = DAY_NAMES[d.getDay()===0 ? 6 : d.getDay()-1];
+    const r = await fetch(`/api/checklist/template/${currentSite}?day=${dayAbbr}`);
+    currentTemplate = await r.json();
+    // Restore saved state
+    taskState   = saved.taskState;
+    weeklyState = saved.weeklyState || {};
+    proofUploaded = {};
+    document.getElementById('clSiteName').textContent = currentTemplate.site_name;
+    document.getElementById('clMeta').textContent =
+      `${DAY_FULL[dayAbbr]} ${TODAY}  ·  ${currentEmployee?.name||''}`;
+    buildChecklistUI_restored(currentTemplate, taskState, weeklyState);
+    buildProofSection(currentTemplate.proof_photos || []);
+    updateProgress();
+    showPhase('phaseChecklist');
+    // Show a resume banner
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background:#1e4d1e;color:#6fcf6f;font-size:13px;font-weight:700;padding:10px 16px;border-radius:10px;margin-bottom:12px;text-align:center;';
+    banner.textContent = '🔄 Progress restored — continuing from where you left off';
+    const container = document.getElementById('clItems');
+    container.parentNode.insertBefore(banner, container);
+    setTimeout(() => banner.remove(), 5000);
+  } catch(e) {
+    // Fall back to normal arrival flow if resume fails
+    clearProgress();
+    showPhase('phaseArrival');
+    getLocation();
+  }
+}
+
+function buildChecklistUI_restored(tpl, savedTask, savedWeekly) {
+  const container = document.getElementById('clItems');
+  container.innerHTML = '';
+  tpl.daily_sections.forEach(s => {
+    const section = buildSection(s.name, s.tasks, false);
+    // Restore tick state
+    section.querySelectorAll('input[type=checkbox]').forEach(inp => {
+      const task = inp.closest('.cl-task')?.querySelector('.cl-task-label')?.textContent;
+      if (!task) return;
+      const checked = !!(savedTask[s.name] && savedTask[s.name][task]);
+      inp.checked = checked;
+      inp.closest('.cl-task')?.classList.toggle('done', checked);
+    });
+    container.appendChild(section);
+  });
+  if (tpl.weekly_sections?.length) {
+    const ws = buildSection('Weekly — ' + (tpl.weekly_today?.[0]||''), tpl.weekly_sections.flatMap(s=>s.tasks), true);
+    ws.querySelectorAll('input[type=checkbox]').forEach(inp => {
+      const task = inp.closest('.cl-task')?.querySelector('.cl-task-label')?.textContent;
+      if (!task) return;
+      const checked = !!(savedWeekly[task]);
+      inp.checked = checked;
+      inp.closest('.cl-task')?.classList.toggle('done', checked);
+    });
+    container.appendChild(ws);
+  }
 }
 
 function _showClientLogo(clientInfo) {
@@ -725,6 +795,7 @@ async function _saveArrival() {
     if (r.ok) {
       arrivalSaved = true;
       currentArrivalId = d.id;
+      saveProgress();        // persist arrivalId before advancing
       btn.textContent = '✅ Saved — Start Checklist';
       btn.disabled = false;
       await loadChecklist(); // auto-advance to checklist
@@ -790,6 +861,7 @@ function buildSection(name, tasks, isWeekly) {
       else taskState[name][task]=inp.checked;
       row.classList.toggle('done', inp.checked);
       updateProgress();
+      saveProgress();
     });
     const track = document.createElement('div');
     track.className='toggle-track'+(isWeekly?' weekly-track':'');
@@ -799,6 +871,31 @@ function buildSection(name, tasks, isWeekly) {
   });
   wrap.appendChild(list);
   return wrap;
+}
+
+// ── Progress persistence (localStorage) ────────────────────────────────────
+function _progressKey() {
+  if (!currentEmployee || !currentSite || !TODAY) return null;
+  return `rl_cl_${TODAY}_${currentEmployee.id}_${currentSite}`;
+}
+function saveProgress() {
+  const key = _progressKey(); if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      arrivalId:   currentArrivalId,
+      taskState:   taskState,
+      weeklyState: weeklyState,
+    }));
+  } catch(e) {}
+}
+function loadSavedProgress() {
+  const key = _progressKey(); if (!key) return null;
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); }
+  catch(e) { return null; }
+}
+function clearProgress() {
+  const key = _progressKey(); if (!key) return;
+  try { localStorage.removeItem(key); } catch(e) {}
 }
 
 function updateProgress() {
@@ -918,6 +1015,7 @@ async function submitChecklist() {
       document.getElementById('doneSub').textContent =
         `${d2.done} of ${d2.total} tasks completed at ${currentTemplate.site_name}`;
       document.getElementById('btnPdf').href = `/api/checklist/${d2.id}/pdf`;
+      clearProgress();   // wipe saved progress now it's submitted
       showPhase('phaseDone');
     } else {
       alert('Error: '+(d2.error||'unknown'));
@@ -969,6 +1067,7 @@ function doSignOut() {
 }
 
 function goToSites() {
+  clearProgress();
   currentSite = null; currentTemplate = null; currentArrivalId = null;
   document.getElementById('clNotes').value = '';
   _resetArrivalUI();

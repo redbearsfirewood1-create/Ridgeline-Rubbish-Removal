@@ -18,6 +18,29 @@ try:
 except ImportError:
     REPORTLAB = False
 
+try:
+    from PIL import Image as _PIL_Image
+    PILLOW = True
+except ImportError:
+    PILLOW = False
+
+def _safe_image_reader(path_or_buf, max_px=1600):
+    """Return an ImageReader resized to max_px on the longest side.
+    Falls back gracefully so a bad photo never crashes the PDF worker."""
+    try:
+        if PILLOW:
+            img = _PIL_Image.open(path_or_buf)
+            img = img.convert('RGB')   # normalise RGBA, P-mode, CMYK → RGB
+            img.thumbnail((max_px, max_px), _PIL_Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=82)
+            buf.seek(0)
+            return ImageReader(buf)
+        else:
+            return ImageReader(path_or_buf)
+    except Exception:
+        return None
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'ridgeline-secret-2024')
 app.permanent_session_lifetime = 86400 * 30
@@ -1522,9 +1545,10 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
         # McDonald's logo on client PDFs
         if hide_employee and os.path.exists(_mcdo_logo):
             try:
-                logo_img = ImageReader(_mcdo_logo)
-                c.drawImage(logo_img, W - M - 56, H - 70, 56, 40,
-                            preserveAspectRatio=True, mask='auto')
+                logo_img = _safe_image_reader(_mcdo_logo)
+                if logo_img:
+                    c.drawImage(logo_img, W - M - 56, H - 70, 56, 40,
+                                preserveAspectRatio=True, mask='auto')
             except Exception:
                 pass
         c.setFont('Helvetica', 9)
@@ -1651,19 +1675,25 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
             arr_img_h = arr_img_w * 0.55
             if y - arr_img_h < 55:
                 y = new_page()
-            try:
-                arr_img = ImageReader(arr_photo_path)
-                c.setFillColor(HexColor('#f5f5f5'))
-                c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=1, stroke=0)
-                c.drawImage(arr_img, M, y - arr_img_h, arr_img_w, arr_img_h,
-                            preserveAspectRatio=True, mask='auto')
-                c.setStrokeColor(LGREY); c.setLineWidth(0.5)
-                c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
-            except Exception:
+            arr_img = _safe_image_reader(arr_photo_path)
+            if arr_img:
+                try:
+                    c.setFillColor(HexColor('#f5f5f5'))
+                    c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=1, stroke=0)
+                    c.drawImage(arr_img, M, y - arr_img_h, arr_img_w, arr_img_h,
+                                preserveAspectRatio=True, mask='auto')
+                    c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                    c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
+                except Exception:
+                    c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                    c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
+                    c.setFont('Helvetica', 9); c.setFillColor(GREY)
+                    c.drawCentredString(W/2, y - arr_img_h/2, '[Photo could not be loaded]')
+            else:
                 c.setStrokeColor(LGREY); c.setLineWidth(0.5)
                 c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
                 c.setFont('Helvetica', 9); c.setFillColor(GREY)
-                c.drawCentredString(W/2, y - arr_img_h/2, '[Photo could not be loaded]')
+                c.drawCentredString(W/2, y - arr_img_h/2, '[Photo not available]')
             y -= arr_img_h + 14
 
         # Proof photos section
@@ -1694,13 +1724,17 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
                 if y - photo_h < 55:
                     y = new_page()
                 px = x_positions[col]
-                try:
-                    img_obj = ImageReader(img_path)
-                    c.setFillColor(HexColor('#f5f5f5'))
-                    c.rect(px, y - photo_h, photo_w, photo_h, fill=1, stroke=0)
-                    c.drawImage(img_obj, px, y - photo_h, photo_w, photo_h,
-                                preserveAspectRatio=True, mask='auto')
-                except Exception:
+                img_obj = _safe_image_reader(img_path)
+                if img_obj:
+                    try:
+                        c.setFillColor(HexColor('#f5f5f5'))
+                        c.rect(px, y - photo_h, photo_w, photo_h, fill=1, stroke=0)
+                        c.drawImage(img_obj, px, y - photo_h, photo_w, photo_h,
+                                    preserveAspectRatio=True, mask='auto')
+                    except Exception:
+                        c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                        c.rect(px, y - photo_h, photo_w, photo_h, fill=0, stroke=1)
+                else:
                     c.setStrokeColor(LGREY); c.setLineWidth(0.5)
                     c.rect(px, y - photo_h, photo_w, photo_h, fill=0, stroke=1)
                 lbl = label_map.get(key, key.replace('_',' ').title())
@@ -1748,12 +1782,15 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
             raw = sig_b64.split(',')[1] if ',' in sig_b64 else sig_b64
             sig_bytes = _b64.b64decode(raw)
             sig_buf   = io.BytesIO(sig_bytes)
-            sig_img   = ImageReader(sig_buf)
-            # White background box
-            c.setFillColor(HexColor('#ffffff'))
-            c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=1, stroke=0)
-            c.drawImage(sig_img, M, y - sig_box_h, sig_box_w, sig_box_h,
-                        mask='auto', preserveAspectRatio=True)
+            sig_img   = _safe_image_reader(sig_buf, max_px=800)
+            if sig_img:
+                c.setFillColor(HexColor('#ffffff'))
+                c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=1, stroke=0)
+                c.drawImage(sig_img, M, y - sig_box_h, sig_box_w, sig_box_h,
+                            mask='auto', preserveAspectRatio=True)
+            else:
+                c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=0, stroke=1)
         except Exception:
             c.setStrokeColor(LGREY); c.setLineWidth(0.5)
             c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=0, stroke=1)
@@ -1778,13 +1815,17 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
 @app.route('/api/checklist/<cid>/pdf')
 @login_required
 def api_checklist_pdf(cid):
-    cls = load_json(CHECKLISTS_FILE)
-    cl  = next((x for x in cls if x['id'] == cid), None)
-    if not cl: return ('Not found', 404)
-    buf = _build_checklist_pdf(cl)
-    fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
-    return Response(buf, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'inline; filename={fn}'})
+    try:
+        cls = load_json(CHECKLISTS_FILE)
+        cl  = next((x for x in cls if x['id'] == cid), None)
+        if not cl: return ('Not found', 404)
+        buf = _build_checklist_pdf(cl)
+        fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
+        return Response(buf, mimetype='application/pdf',
+                        headers={'Content-Disposition': f'inline; filename={fn}'})
+    except Exception as e:
+        app.logger.error(f'PDF error for {cid}: {e}', exc_info=True)
+        return jsonify({'error': 'PDF generation failed', 'detail': str(e)}), 500
 
 # ── Client auth ───────────────────────────────────────────────────────────────
 @app.route('/client/login', methods=['GET','POST'])
@@ -1899,16 +1940,20 @@ def api_client_checklists():
 @app.route('/api/client/checklist/<cid>/pdf')
 @client_required
 def api_client_checklist_pdf(cid):
-    client_sites = session.get('client_sites', [])
-    cls = load_json(CHECKLISTS_FILE)
-    cl  = next((x for x in cls if x['id'] == cid), None)
-    if not cl: return ('Not found', 404)
-    if client_sites and cl.get('site_id') not in client_sites:
-        return ('Forbidden', 403)
-    buf = _build_checklist_pdf(cl, hide_employee=True, include_photos=True)
-    fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
-    return Response(buf, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'inline; filename={fn}'})
+    try:
+        client_sites = session.get('client_sites', [])
+        cls = load_json(CHECKLISTS_FILE)
+        cl  = next((x for x in cls if x['id'] == cid), None)
+        if not cl: return ('Not found', 404)
+        if client_sites and cl.get('site_id') not in client_sites:
+            return ('Forbidden', 403)
+        buf = _build_checklist_pdf(cl, hide_employee=True, include_photos=True)
+        fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
+        return Response(buf, mimetype='application/pdf',
+                        headers={'Content-Disposition': f'inline; filename={fn}'})
+    except Exception as e:
+        app.logger.error(f'Client PDF error for {cid}: {e}', exc_info=True)
+        return jsonify({'error': 'PDF generation failed', 'detail': str(e)}), 500
 
 # ── Client proof photo serve ──────────────────────────────────────────────────
 @app.route('/client-proof-photos/<filename>')
