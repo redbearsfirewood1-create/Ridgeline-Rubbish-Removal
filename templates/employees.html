@@ -456,6 +456,27 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
   </div>
 </div>
 
+<!-- Edit client modal -->
+<div class="modal-bg" id="editClientModal" onclick="closeClientEditModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Edit Client</div>
+    <div class="input-label">Company / Client Name</div>
+    <input class="input" id="editClientName" style="margin-bottom:12px;">
+    <div class="input-label">Login Username</div>
+    <input class="input" id="editClientUser" style="margin-bottom:12px;" autocomplete="off">
+    <div class="input-label">New Password <span style="color:#555;font-weight:400;">(leave blank to keep current)</span></div>
+    <input class="input" id="editClientPass" placeholder="Leave blank to keep" type="password" autocomplete="new-password" style="margin-bottom:12px;">
+    <div class="input-label">Mobile Number</div>
+    <input class="input" id="editClientMobile" placeholder="0412 345 678" type="tel" style="margin-bottom:12px;">
+    <div class="input-label">Assign Sites</div>
+    <div id="editClientSiteChecks" style="background:#111;border:1px solid #333;border-radius:10px;padding:10px;max-height:140px;overflow-y:auto;font-size:13px;margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn-modal cancel" onclick="closeClientEditModal()">Cancel</button>
+      <button class="btn-modal save" onclick="saveClientEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const ALL_DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
 const DAY_LABEL = {sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'};
@@ -735,6 +756,7 @@ function renderEmployees() {
         <span class="emp-status active">Active</span>
       </div>
       <div class="emp-actions">
+        <button class="btn-sm" onclick="openClientEditModal('${c.id}')">Edit</button>
         ${c.mobile
           ? `<button class="btn-sm sms" onclick="sendClientSMS('${safeName}','${safeUser}','${safePass}','${safeMob}')">📲 Login SMS</button>`
           : `<button class="btn-sm sms-off" title="Add a mobile number to send login SMS">📲 No mobile</button>`}
@@ -823,6 +845,63 @@ async function deleteClient(cid) {
     await fetch(`/api/clients/${cid}`, {method:'DELETE'});
     loadEmployees();
   } catch(e) {}
+}
+
+// ── Client edit modal ───────────────────────────────────────────────────────
+let editingClientId = null;
+
+function openClientEditModal(cid) {
+  const c = clients.find(x => x.id === cid);
+  if (!c) return;
+  editingClientId = cid;
+  document.getElementById('editClientName').value   = c.name    || '';
+  document.getElementById('editClientUser').value   = c.username|| '';
+  document.getElementById('editClientPass').value   = '';
+  document.getElementById('editClientMobile').value = c.mobile  || '';
+  // Populate site checkboxes with current assignments ticked
+  const wrap = document.getElementById('editClientSiteChecks');
+  if (!sites.length) {
+    wrap.innerHTML = '<div style="color:#555;">No sites found</div>';
+  } else {
+    const assigned = new Set(c.sites || []);
+    wrap.innerHTML = sites.map(s => `
+      <label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;">
+        <input type="checkbox" class="edit-client-site-check" value="${s.id}"
+          ${assigned.has(s.id) ? 'checked' : ''} style="accent-color:#2196f3;">
+        <span>${s.name}</span>
+      </label>`).join('');
+  }
+  document.getElementById('editClientModal').classList.add('open');
+}
+
+function closeClientEditModal(e) {
+  if (!e || e.target.id === 'editClientModal')
+    document.getElementById('editClientModal').classList.remove('open');
+}
+
+async function saveClientEdit() {
+  const name     = document.getElementById('editClientName').value.trim();
+  const username = document.getElementById('editClientUser').value.trim().toLowerCase();
+  const password = document.getElementById('editClientPass').value;
+  const mobile   = document.getElementById('editClientMobile').value.trim();
+  const sites_   = [...document.querySelectorAll('.edit-client-site-check:checked')].map(el => el.value);
+  if (!name)     { alert('Name is required'); return; }
+  if (!username) { alert('Username is required'); return; }
+  const payload = {name, username, mobile, sites: sites_};
+  if (password) payload.password = password;   // only send if changed
+  try {
+    const r = await fetch(`/api/clients/${editingClientId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      closeClientEditModal();
+      loadEmployees();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || 'Failed to save');
+    }
+  } catch(e) { alert('Network error'); }
 }
 
 function previewEditPhoto(input) {
