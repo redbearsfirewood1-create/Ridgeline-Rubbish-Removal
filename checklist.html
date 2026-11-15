@@ -94,7 +94,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .photo-placeholder{text-align:center;padding:32px 20px;}
 .photo-placeholder-icon{font-size:48px;margin-bottom:10px;}
 .photo-placeholder-text{font-size:14px;color:#666;}
-.photo-input{display:none;}
+.photo-capture input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
 
 .location-status{font-size:12px;padding:10px 14px;border-radius:10px;margin-bottom:16px;background:#1a1a1a;border:1px solid #2a2a2a;color:#888;}
 .location-status.got{border-color:#3d8b3d;color:#4caf50;}
@@ -344,20 +344,22 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
       <div class="arrival-site-name" id="arrivalSiteName">—</div>
     </div>
 
-    <div class="photo-capture" id="arrivalPhotoCapture" onclick="triggerArrivalPhoto()">
-      <img id="arrivalPreview" class="photo-preview" alt="">
-      <div class="photo-placeholder" id="arrivalPlaceholder">
-        <div class="photo-placeholder-icon">📷</div>
-        <div class="photo-placeholder-text">Tap to take arrival photo</div>
+    <label style="display:block;cursor:pointer;">
+      <div class="photo-capture" id="arrivalPhotoCapture">
+        <img id="arrivalPreview" class="photo-preview" alt="">
+        <div class="photo-placeholder" id="arrivalPlaceholder">
+          <div class="photo-placeholder-icon">📷</div>
+          <div class="photo-placeholder-text">Tap to take arrival photo</div>
+        </div>
+        <input type="file" accept="image/*" capture="environment" id="arrivalPhotoInput"
+               onchange="arrivalPhotoSelected(this); this.value='';">
       </div>
-      <input type="file" accept="image/*" capture="environment"
-             class="photo-input" id="arrivalPhotoInput" onchange="arrivalPhotoSelected(this)">
-    </div>
+    </label>
 
     <div class="location-status" id="locationStatus">📍 Getting your location…</div>
 
     <button class="btn-primary" id="btnConfirmArrival" onclick="confirmArrival()" disabled>
-      Confirm Arrival & Start Checklist
+      📷 Take photo above to continue
     </button>
   </div>
 </div>
@@ -438,6 +440,8 @@ let currentTemplate = null;
 let currentArrivalId = null;
 let submittedClId = null;
 let gpsData = {lat:'', lng:'', accuracy:''};
+let gpsWatchId = null;
+let gpsPatchedId = null; // arrival id we already patched GPS onto
 let taskState = {};
 let weeklyState = {};
 let proofUploaded = {};
@@ -636,78 +640,106 @@ function _showClientLogo(clientInfo) {
 }
 
 let arrivalPhotoFile = null;
-function triggerArrivalPhoto() { document.getElementById('arrivalPhotoInput').click(); }
+let arrivalSaved = false; // tracks whether arrival POST has already been sent
 
 function arrivalPhotoSelected(input) {
-  if (!input.files[0]) return;
-  arrivalPhotoFile = input.files[0];
-  const url = URL.createObjectURL(arrivalPhotoFile);
+  const file = input.files && input.files[0];
+  if (!file) return;
+  arrivalPhotoFile = file;
+  const url = URL.createObjectURL(file);
   const preview = document.getElementById('arrivalPreview');
   preview.src = url; preview.style.display = 'block';
   document.getElementById('arrivalPlaceholder').style.display = 'none';
   document.getElementById('arrivalPhotoCapture').classList.add('has-photo');
-  checkArrivalReady();
+  // Auto-save immediately — don't wait for button tap
+  _saveArrival();
 }
 
 function getLocation() {
   const status = document.getElementById('locationStatus');
   if (!navigator.geolocation) {
-    status.textContent = '📍 Location not available on this device';
-    status.className = 'location-status err';
-    gpsData = {lat:'', lng:'', accuracy:''};
-    checkArrivalReady();
+    status.textContent = '📍 No GPS on this device';
+    status.className = 'location-status';
     return;
   }
-  navigator.geolocation.getCurrentPosition(
+  // Stop any existing watch before starting a new one
+  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  status.textContent = '📍 Getting your location…';
+  status.className = 'location-status';
+  gpsWatchId = navigator.geolocation.watchPosition(
     pos => {
-      gpsData = {
-        lat: pos.coords.latitude.toFixed(6),
-        lng: pos.coords.longitude.toFixed(6),
+      const newData = {
+        lat:      pos.coords.latitude.toFixed(6),
+        lng:      pos.coords.longitude.toFixed(6),
         accuracy: Math.round(pos.coords.accuracy)
       };
-      status.textContent = `📍 Location captured (±${gpsData.accuracy}m)`;
-      status.className = 'location-status got';
-      checkArrivalReady();
+      // Only update if accuracy improved or we had nothing
+      if (!gpsData.lat || newData.accuracy <= (gpsData.accuracy || 9999)) {
+        gpsData = newData;
+        status.textContent = `📍 Location ready (±${gpsData.accuracy}m)`;
+        status.className = 'location-status got';
+        // If arrival was already saved without GPS, patch it now
+        if (currentArrivalId && currentArrivalId !== gpsPatchedId) {
+          gpsPatchedId = currentArrivalId;
+          _patchArrivalGPS(currentArrivalId);
+        }
+      }
     },
     err => {
-      status.textContent = '📍 Location unavailable — continuing without GPS';
-      status.className = 'location-status err';
-      gpsData = {lat:'', lng:'', accuracy:''};
-      checkArrivalReady();
+      if (!gpsData.lat) {
+        status.textContent = '📍 No GPS — photo saved';
+        status.className = 'location-status';
+      }
     },
-    {timeout:10000, enableHighAccuracy:true}
+    {timeout:15000, enableHighAccuracy:true, maximumAge:0}
   );
 }
 
-function checkArrivalReady() {
-  // Can confirm once photo taken (location is optional)
-  document.getElementById('btnConfirmArrival').disabled = !arrivalPhotoFile;
+async function _patchArrivalGPS(arrId) {
+  if (!gpsData.lat || !gpsData.lng) return;
+  try {
+    await fetch(`/api/arrivals/${arrId}/gps`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({lat:gpsData.lat, lng:gpsData.lng, accuracy:String(gpsData.accuracy)})
+    });
+  } catch(e) { /* silent — GPS is best-effort */ }
 }
 
-async function confirmArrival() {
-  document.getElementById('btnConfirmArrival').disabled = true;
-  document.getElementById('btnConfirmArrival').textContent = 'Saving…';
+function checkArrivalReady() { /* button always enabled */ }
+
+async function _saveArrival() {
+  if (arrivalSaved) { await loadChecklist(); return; } // already saved — just navigate
+  const btn = document.getElementById('btnConfirmArrival');
+  btn.disabled = true;
+  btn.textContent = '📸 Saving…';
   try {
     const fd = new FormData();
     fd.append('site_id', currentSite);
-    fd.append('lat', gpsData.lat);
-    fd.append('lng', gpsData.lng);
-    fd.append('accuracy', gpsData.accuracy);
+    fd.append('lat',      gpsData.lat      || '');
+    fd.append('lng',      gpsData.lng      || '');
+    fd.append('accuracy', gpsData.accuracy || '');
     if (arrivalPhotoFile) fd.append('photo', arrivalPhotoFile, arrivalPhotoFile.name || 'arrival.jpg');
-
     const r = await fetch('/api/arrivals', {method:'POST', body:fd});
     const d = await r.json();
     if (r.ok) {
+      arrivalSaved = true;
       currentArrivalId = d.id;
-      await loadChecklist();
+      btn.textContent = '✅ Saved — Start Checklist';
+      btn.disabled = false;
+      await loadChecklist(); // auto-advance to checklist
     } else {
-      alert('Error saving arrival: ' + (d.error||'unknown'));
+      btn.textContent = 'Retry — tap to try again';
+      btn.disabled = false;
     }
-  } catch(e) { alert('Connection error saving arrival'); }
-  finally {
-    document.getElementById('btnConfirmArrival').disabled = false;
-    document.getElementById('btnConfirmArrival').textContent = 'Confirm Arrival & Start Checklist';
+  } catch(e) {
+    btn.textContent = 'No connection — tap to retry';
+    btn.disabled = false;
   }
+}
+
+async function confirmArrival() {
+  await _saveArrival();
 }
 
 // ── Checklist ──────────────────────────────────────────────────────────────
@@ -907,35 +939,39 @@ function showPhase(id) {
 
 function topAction() { if (currentEmployee) doSignOut(); }
 
+function _resetArrivalUI() {
+  arrivalPhotoFile = null; arrivalSaved = false;
+  gpsData = {lat:'', lng:'', accuracy:''};
+  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  gpsPatchedId = null;
+  document.getElementById('arrivalPreview').style.display='none';
+  document.getElementById('arrivalPlaceholder').style.display='block';
+  document.getElementById('arrivalPhotoCapture').classList.remove('has-photo');
+  const btn = document.getElementById('btnConfirmArrival');
+  btn.textContent = '📷 Take photo above to continue';
+  btn.disabled = true;
+  document.getElementById('locationStatus').textContent='📍 Getting your location…';
+  document.getElementById('locationStatus').className='location-status';
+}
+
 function doSignOut() {
   fetch('/checklist/logout');
   currentEmployee = null; currentSite = null; currentTemplate = null;
-  currentArrivalId = null; arrivalPhotoFile = null;
+  currentArrivalId = null;
   pin = ''; updatePinDots();
   document.getElementById('btnLogin').disabled = true;
   document.getElementById('loginErr').textContent = '';
   document.getElementById('empSelect').value = '';
   document.getElementById('btnTopAction').textContent = 'Log In';
   document.getElementById('topbarName').textContent = 'Ridgeline Cleaning';
-  // Reset arrival
-  document.getElementById('arrivalPreview').style.display='none';
-  document.getElementById('arrivalPlaceholder').style.display='block';
-  document.getElementById('arrivalPhotoCapture').classList.remove('has-photo');
-  document.getElementById('locationStatus').textContent='📍 Getting your location…';
-  document.getElementById('locationStatus').className='location-status';
+  _resetArrivalUI();
   showPhase('phaseLogin');
 }
 
 function goToSites() {
   currentSite = null; currentTemplate = null; currentArrivalId = null;
-  arrivalPhotoFile = null;
   document.getElementById('clNotes').value = '';
-  document.getElementById('arrivalPreview').style.display='none';
-  document.getElementById('arrivalPlaceholder').style.display='block';
-  document.getElementById('arrivalPhotoCapture').classList.remove('has-photo');
-  document.getElementById('btnConfirmArrival').disabled = true;
-  document.getElementById('locationStatus').textContent='📍 Getting your location…';
-  document.getElementById('locationStatus').className='location-status';
+  _resetArrivalUI();
   clearSig();
   document.getElementById('managerName').value = '';
   showPhase('phaseSites');

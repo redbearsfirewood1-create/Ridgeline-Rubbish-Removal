@@ -41,6 +41,25 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 .stat-val { font-size: 22px; font-weight: 900; color: #3d8b3d; }
 .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
 
+/* ── Cleaning KPIs ── */
+.kpi-section { max-width: 600px; margin: 0 auto 28px; padding: 0 16px; }
+.kpi-heading { font-size: 13px; font-weight: 800; color: #3d8b3d; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 10px; }
+.kpi-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 20px; }
+.kpi-card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 16px 10px; text-align: center; }
+.kpi-num  { font-size: 26px; font-weight: 900; color: #f0f0f0; line-height: 1; }
+.kpi-unit { font-size: 11px; color: #3d8b3d; font-weight: 700; margin-top: 2px; }
+.kpi-lbl  { font-size: 11px; color: #555; margin-top: 4px; }
+.emp-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media(max-width:420px){ .emp-kpi-grid{grid-template-columns:1fr;} }
+.emp-kpi-card { background: #141414; border: 1px solid #222; border-radius: 14px; padding: 14px 12px; }
+.emp-kpi-name { font-size: 13px; font-weight: 800; color: #f0f0f0; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.emp-kpi-time { font-size: 24px; font-weight: 900; color: #3d8b3d; }
+.emp-kpi-time-lbl { font-size: 10px; color: #555; margin-bottom: 8px; }
+.emp-kpi-total { font-size: 11px; color: #666; margin-bottom: 8px; }
+.day-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.day-pill { font-size: 9px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #1e3a1e; color: #6fcf6f; }
+.day-pill.top { background: #3d8b3d; color: #fff; }
+
 /* ── Ridgeline loaders ───────────────────────────────────── */
 @keyframes rl-spin    { to { transform:rotate(360deg) } }
 @keyframes rl-spin-r  { to { transform:rotate(-360deg) } }
@@ -143,6 +162,32 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   <div class="stat"><div class="stat-val" id="sRevenue">—</div><div class="stat-lbl">This Month</div></div>
 </div>
 
+<!-- Cleaning KPIs -->
+<div class="kpi-section">
+  <div class="kpi-heading">🧹 Cleaning Performance</div>
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-num" id="kTotal">—</div>
+      <div class="kpi-lbl">Total Sites Cleaned</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" id="kKitchen">—</div>
+      <div class="kpi-unit" id="kKitchenU" style="display:none">avg mins</div>
+      <div class="kpi-lbl">With Kitchen</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" id="kNoKitchen">—</div>
+      <div class="kpi-unit" id="kNoKitchenU" style="display:none">avg mins</div>
+      <div class="kpi-lbl">No Kitchen</div>
+    </div>
+  </div>
+
+  <div class="kpi-heading">👷 Employee Performance</div>
+  <div class="emp-kpi-grid" id="empKpiGrid">
+    <div style="color:#444;font-size:13px;padding:8px;">Loading…</div>
+  </div>
+</div>
+
 <div class="tiles">
   <a href="/quote" class="tile">
     <div class="tile-icon">📋</div>
@@ -201,6 +246,53 @@ fetch('/api/stats').then(r=>r.json()).then(s => {
   document.getElementById('sQuotes').textContent  = s.total_quotes ?? '0';
   document.getElementById('sPending').textContent = s.pending_quotes ?? '0';
   document.getElementById('sRevenue').textContent = '$' + ((s.month_revenue||0)/1).toLocaleString('en-AU',{maximumFractionDigits:0});
+});
+
+function fmtMins(m) {
+  if (m == null) return '—';
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60), rem = Math.round(m % 60);
+  return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
+}
+
+const DAY_SHORT = {Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
+
+fetch('/api/cleaning-kpis').then(r=>r.json()).then(d => {
+  document.getElementById('kTotal').textContent = d.total_sites_cleaned ?? 0;
+
+  const kEl = document.getElementById('kKitchen');
+  kEl.textContent = fmtMins(d.avg_mins_kitchen);
+  if (d.avg_mins_kitchen != null) document.getElementById('kKitchenU').style.display='';
+
+  const nkEl = document.getElementById('kNoKitchen');
+  nkEl.textContent = fmtMins(d.avg_mins_no_kitchen);
+  if (d.avg_mins_no_kitchen != null) document.getElementById('kNoKitchenU').style.display='';
+
+  const grid = document.getElementById('empKpiGrid');
+  if (!d.employees || !d.employees.length) {
+    grid.innerHTML = '<div style="color:#444;font-size:13px;padding:8px;grid-column:1/-1;">No data yet — times appear after employees submit checklists with GPS.</div>';
+    return;
+  }
+  grid.innerHTML = d.employees.map(emp => {
+    const allDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const topSet  = new Set(emp.top_days || []);
+    const dayPills = allDays
+      .filter(dy => (emp.day_breakdown||{})[dy] > 0)
+      .map(dy => {
+        const isTop = topSet.has(dy);
+        return `<span class="day-pill${isTop?' top':''}">${DAY_SHORT[dy]}</span>`;
+      }).join('');
+    return `
+    <div class="emp-kpi-card">
+      <div class="emp-kpi-name">👷 ${emp.name}</div>
+      <div class="emp-kpi-time">${fmtMins(emp.avg_mins)}</div>
+      <div class="emp-kpi-time-lbl">avg completion time</div>
+      <div class="emp-kpi-total">${emp.total} checklist${emp.total!==1?'s':''} submitted</div>
+      <div class="day-pills">${dayPills || '<span style="color:#444;font-size:11px;">No day data</span>'}</div>
+    </div>`;
+  }).join('');
+}).catch(() => {
+  document.getElementById('empKpiGrid').innerHTML = '<div style="color:#444;font-size:12px;padding:8px;grid-column:1/-1;">Could not load KPIs</div>';
 });
 </script>
 </body>

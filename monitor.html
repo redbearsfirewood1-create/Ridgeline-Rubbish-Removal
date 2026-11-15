@@ -433,10 +433,31 @@ function renderSites(sites) {
         ? new Date(e.arrival_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false})
         : '';
       const lbl = e.checked_in ? 'In' : e.status==='red' ? 'Overdue' : e.status==='yellow' ? 'Late' : '—';
+      const arrImgHtml = e.arrival_photo
+        ? `<img src="${e.arrival_photo}" style="width:28px;height:28px;object-fit:cover;border-radius:50%;border:2px solid #4caf50;margin-left:4px;cursor:pointer;" onclick="openLightbox('${e.arrival_photo}')" title="Arrival photo">`
+        : (e.photo ? `<img src="${e.photo}" style="width:28px;height:28px;object-fit:cover;border-radius:50%;border:2px solid #333;margin-left:4px;">` : '');
+      const gpsHtml = e.lat && e.lng
+        ? `<a href="https://maps.google.com/?q=${e.lat},${e.lng}" target="_blank" style="font-size:10px;color:#3d8b3d;margin-left:4px;text-decoration:none;" title="GPS: ${e.lat},${e.lng}">📍</a>`
+        : '';
+      const finishStr = e.finish_time
+        ? new Date(e.finish_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false})
+        : '';
+      const durationHtml = (() => {
+        if (!timeStr || !finishStr) return '';
+        const start = new Date(e.arrival_time);
+        const end   = new Date(e.finish_time);
+        const mins  = Math.round((end - start) / 60000);
+        if (mins < 0) return '';
+        const h = Math.floor(mins/60), m = mins % 60;
+        return `<div style="font-size:9px;color:#888;white-space:nowrap;">${h?h+'h ':''} ${m}m</div>`;
+      })();
       return `<div class="emp-row">
         <div class="s-dot dot-${e.checked_in?'green':e.status}"></div>
+        ${arrImgHtml}
         <div class="emp-row-name">${e.name}</div>
-        ${timeStr?`<div class="emp-row-time">${timeStr}</div>`:''}
+        ${timeStr?`<div class="emp-row-time">${timeStr}${finishStr?'→'+finishStr:''}</div>`:''}
+        ${durationHtml}
+        ${gpsHtml}
         <div class="emp-row-lbl lbl-${e.checked_in?'green':e.status}">${lbl}</div>
       </div>`;
     }).join('');
@@ -652,14 +673,22 @@ function addMarker(site, lat, lng, bounds) {
       ${site.employees.map(e=>`
         <div style="display:flex;flex-direction:column;margin-top:8px;background:#1a1a1a;border-radius:7px;padding:7px 9px;">
           <div style="display:flex;align-items:center;gap:7px;">
-            ${e.photo ? `<img src="${e.photo}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;">` :
-              `<div style="width:26px;height:26px;border-radius:50%;background:#1a2e1a;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;">${e.name[0]}</div>`}
+            ${e.arrival_photo
+              ? `<img src="${e.arrival_photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #4caf50;" title="Arrival photo">`
+              : e.photo
+                ? `<img src="${e.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #333;">`
+                : `<div style="width:36px;height:36px;border-radius:50%;background:#1a2e1a;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;flex-shrink:0;">${e.name[0]}</div>`}
             <div>
               <div style="font-size:12px;font-weight:700;">${e.name}</div>
               <div style="display:flex;align-items:center;gap:4px;margin-top:1px;">
                 <span style="width:7px;height:7px;border-radius:50%;background:${e.checked_in?'#4caf50':e.status==='red'?'#e53935':e.status==='yellow'?'#f5a623':'#555'};display:inline-block;"></span>
                 <span style="font-size:10px;color:${e.checked_in?'#4caf50':e.status==='red'?'#e53935':e.status==='yellow'?'#f5a623':'#777'};">${e.checked_in?'On site':e.status==='red'?'Overdue':e.status==='yellow'?'Late':'Not started'}</span>
+                ${e.lat && e.lng ? `<a href="https://maps.google.com/?q=${e.lat},${e.lng}" target="_blank" style="font-size:10px;color:#3d8b3d;text-decoration:none;" title="${e.lat}, ${e.lng}">📍</a>` : ''}
               </div>
+              ${(e.arrival_time || e.finish_time) ? `<div style="font-size:10px;color:#888;margin-top:2px;">
+                ${e.arrival_time ? '🟢 ' + new Date(e.arrival_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false}) : ''}
+                ${e.finish_time  ? ' → 🏁 ' + new Date(e.finish_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false}) : ''}
+              </div>` : ''}
             </div>
           </div>
           ${e.mobile ? `
