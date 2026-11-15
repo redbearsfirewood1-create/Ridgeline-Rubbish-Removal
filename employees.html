@@ -310,6 +310,12 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
             <input class="input" id="newClientPass" placeholder="Set a password" type="password" autocomplete="new-password">
           </div>
           <div>
+            <div class="input-label">Mobile Number (for SMS login link)</div>
+            <input class="input" id="newClientMobile" placeholder="e.g. 0412 345 678" type="tel">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
             <div class="input-label">Assign Sites</div>
             <div id="clientSiteChecks" style="background:#111;border:1px solid #333;border-radius:10px;padding:10px;max-height:120px;overflow-y:auto;font-size:13px;">
               <div style="color:#555;">Loading sites…</div>
@@ -715,15 +721,23 @@ function renderEmployees() {
 
   const clientCards = clients.map(c => {
     const siteNames = (c.sites||[]).map(sid => { const s = sites.find(x=>x.id===sid); return s?s.name:sid; }).join(', ') || 'No sites assigned';
+    const safeName  = (c.name||'').replace(/'/g,"\\'");
+    const safeUser  = (c.username||'').replace(/'/g,"\\'");
+    const safePass  = (c.password||'').replace(/'/g,"\\'");
+    const safeMob   = (c.mobile||'').replace(/'/g,"\\'");
     return `
     <div class="emp-card">
       <div class="emp-avatar" style="background:#1a3a6a;font-size:20px;">🏢</div>
       <div class="emp-info">
         <div class="emp-name">${c.name} <span class="role-badge client">Client</span></div>
-        <div class="emp-pin">Login: ${c.username} · Sites: ${siteNames}</div>
+        <div class="emp-pin">Login: ${c.username}${c.mobile ? ` · 📱 ${c.mobile}` : ''}</div>
+        <div class="emp-pin" style="margin-top:2px;">Sites: ${siteNames}</div>
         <span class="emp-status active">Active</span>
       </div>
       <div class="emp-actions">
+        ${c.mobile
+          ? `<button class="btn-sm sms" onclick="sendClientSMS('${safeName}','${safeUser}','${safePass}','${safeMob}')">📲 Login SMS</button>`
+          : `<button class="btn-sm sms-off" title="Add a mobile number to send login SMS">📲 No mobile</button>`}
         <button class="btn-sm red" onclick="deleteClient('${c.id}')">Delete</button>
       </div>
     </div>`;
@@ -771,6 +785,7 @@ async function addClient() {
   const name     = document.getElementById('newClientName').value.trim();
   const username = document.getElementById('newClientUser').value.trim().toLowerCase();
   const password = document.getElementById('newClientPass').value;
+  const mobile   = document.getElementById('newClientMobile').value.trim();
   const checked  = [...document.querySelectorAll('.client-site-check:checked')].map(el=>el.value);
   document.getElementById('empErr').textContent = '';
   if (!name)     { document.getElementById('empErr').textContent='Client name is required'; return; }
@@ -779,12 +794,13 @@ async function addClient() {
   try {
     const r = await fetch('/api/clients', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name, username, password, sites: checked})
+      body: JSON.stringify({name, username, password, mobile, sites: checked})
     });
     if (r.ok) {
       document.getElementById('newClientName').value='';
       document.getElementById('newClientUser').value='';
       document.getElementById('newClientPass').value='';
+      document.getElementById('newClientMobile').value='';
       document.querySelectorAll('.client-site-check').forEach(el=>el.checked=false);
       loadEmployees();
     } else {
@@ -792,6 +808,13 @@ async function addClient() {
       document.getElementById('empErr').textContent = d.error || 'Failed to create client';
     }
   } catch(e) { document.getElementById('empErr').textContent='Network error'; }
+}
+
+function sendClientSMS(name, username, password, mobile) {
+  const base = window.location.origin;
+  const url  = `${base}/client/login`;
+  const msg  = `Hi ${name}, here are your Ridgeline client portal login details:\n\nURL: ${url}\nUsername: ${username}\nPassword: ${password}\n\nPlease keep these details secure.`;
+  window.location.href = `sms:${mobile}?body=${encodeURIComponent(msg)}`;
 }
 
 async function deleteClient(cid) {

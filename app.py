@@ -1938,6 +1938,7 @@ def api_create_client():
         'name':       data.get('name','').strip(),
         'username':   data.get('username','').strip().lower(),
         'password':   data.get('password','').strip(),
+        'mobile':     data.get('mobile','').strip(),
         'sites':      data.get('sites', []),
         'active':     True,
         'created_at': datetime.now().isoformat(),
