@@ -38,6 +38,19 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .btn-add{background:#3d8b3d;border:none;color:#fff;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;width:100%;}
 .btn-add:active{background:#2d6b2d;}
 .form-err{color:#ff6b6b;font-size:13px;min-height:16px;margin-top:6px;}
+/* Role selector buttons */
+.role-btn{background:#111;border:2px solid #2a2a2a;border-radius:12px;padding:12px 8px;text-align:center;cursor:pointer;color:#888;transition:all .15s;}
+.role-btn:hover{border-color:#555;color:#ccc;}
+.role-btn.active{border-color:#3d8b3d;background:#0e2b0e;color:#fff;}
+/* Client role active = blue */
+#roleBtn-client.active{border-color:#2196f3;background:#0a1f3a;color:#fff;}
+/* Admin role active = gold */
+#roleBtn-admin.active{border-color:#ffc107;background:#2a1f00;color:#fff;}
+/* Role badge in user list */
+.role-badge{font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px;}
+.role-badge.employee{background:#1e4d1e;color:#6fcf6f;}
+.role-badge.client{background:#0a2550;color:#64b5f6;}
+.role-badge.admin{background:#3a2800;color:#ffd54f;}
 
 /* Employee list */
 .emp-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;}
@@ -96,6 +109,33 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .btn-modal{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none;}
 .btn-modal.save{background:#3d8b3d;color:#fff;}
 .btn-modal.cancel{background:#222;color:#aaa;}
+
+/* ── Attendance Calendar ─────────────────────────────────── */
+.cal-nav-btn{background:#1a1a1a;border:1px solid #333;color:#ccc;font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.cal-nav-btn:hover{border-color:#3d8b3d;color:#3d8b3d;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;}
+.cal-day-hdr{text-align:center;font-size:11px;font-weight:700;color:#555;padding:6px 0;}
+.cal-day{background:#1a1a1a;border:1px solid #222;border-radius:9px;min-height:68px;padding:6px;cursor:pointer;transition:border-color .15s;}
+.cal-day:hover{border-color:#3d8b3d;}
+.cal-day.other-month{opacity:.3;cursor:default;}
+.cal-day.has-data{border-color:#2d4a2d;}
+.cal-day.today{border-color:#3d8b3d;background:#1a2a1a;}
+.cal-day-num{font-size:11px;font-weight:700;color:#666;margin-bottom:4px;}
+.cal-day.today .cal-day-num{color:#4caf50;}
+.cal-emp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;}
+.cal-site-count{font-size:9px;color:#555;margin-top:3px;}
+.cal-detail-card{background:#1a1a1a;border:1px solid #2a4a2a;border-radius:14px;padding:16px;}
+.cal-detail-emp{margin-bottom:12px;}
+.cal-detail-emp-name{font-size:14px;font-weight:700;color:#f0f0f0;margin-bottom:6px;}
+.cal-detail-site{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#111;border-radius:8px;margin-bottom:4px;font-size:12px;}
+.cal-detail-site-name{color:#ccc;font-weight:600;}
+.cal-detail-time{color:#666;font-size:11px;}
+.cal-detail-pct{font-size:11px;font-weight:700;}
+.cal-sum-table{width:100%;border-collapse:collapse;font-size:12px;}
+.cal-sum-table th{text-align:left;padding:8px 10px;color:#555;font-size:11px;border-bottom:1px solid #2a2a2a;}
+.cal-sum-table td{padding:8px 10px;border-bottom:1px solid #1e1e1e;color:#ccc;vertical-align:top;}
+.cal-sum-table tr:hover td{background:#1a1a1a;}
+/* ───────────────────────────────────────────────────────── */
 
 /* ── Ridgeline loaders ───────────────────────────────────── */
 @keyframes rl-spin    { to { transform:rotate(360deg) } }
@@ -191,44 +231,114 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 
 <div class="wrap">
   <div class="tabs">
-    <button class="tab active" onclick="showTab('employees')">👥 Employees</button>
+    <button class="tab active" onclick="showTab('employees')">👥 Users</button>
     <button class="tab" onclick="showTab('sites')">🏪 Sites</button>
+    <button class="tab" onclick="showTab('attendance')">📅 Attendance</button>
   </div>
 
-  <!-- Employees tab -->
+  <!-- Users tab -->
   <div id="tabEmployees">
     <div class="card">
-      <div class="card-title">Add Employee</div>
-      <div class="form-row">
-        <div>
-          <div class="input-label">Full Name</div>
-          <input class="input" id="newName" placeholder="e.g. Sarah Jones" type="text">
-        </div>
-        <div>
-          <div class="input-label">4-Digit PIN</div>
-          <input class="input" id="newPin" placeholder="e.g. 1234" type="number" maxlength="4" inputmode="numeric">
-        </div>
-      </div>
-      <div class="form-row">
-        <div>
-          <div class="input-label">Mobile Number</div>
-          <input class="input" id="newMobile" placeholder="e.g. 0412 345 678" type="tel">
-        </div>
-        <div>
-          <div class="input-label">Profile Photo (optional)</div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#111;border:1px solid #333;border-radius:10px;padding:11px 12px;">
-            <span style="font-size:18px;">📷</span>
-            <span style="font-size:13px;color:#888;" id="newPhotoLabel">Choose photo…</span>
-            <input type="file" id="newPhoto" accept="image/*" style="display:none" onchange="document.getElementById('newPhotoLabel').textContent=this.files[0]?.name||'Choose photo…'">
-          </label>
+      <div class="card-title">Add User</div>
+
+      <!-- Role selector -->
+      <div style="margin-bottom:16px;">
+        <div class="input-label">Role / Access Level</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px;">
+          <div class="role-btn active" id="roleBtn-employee" onclick="selectRole('employee')">
+            <div style="font-size:18px;">👷</div>
+            <div style="font-size:12px;font-weight:700;margin-top:4px;">Employee</div>
+            <div style="font-size:10px;color:inherit;opacity:.8;">Checklist PIN login</div>
+          </div>
+          <div class="role-btn" id="roleBtn-client" onclick="selectRole('client')">
+            <div style="font-size:18px;">🏢</div>
+            <div style="font-size:12px;font-weight:700;margin-top:4px;">Client</div>
+            <div style="font-size:10px;color:inherit;opacity:.8;">View their own sites</div>
+          </div>
+          <div class="role-btn" id="roleBtn-admin" onclick="selectRole('admin')">
+            <div style="font-size:18px;">🛡️</div>
+            <div style="font-size:12px;font-weight:700;margin-top:4px;">Admin</div>
+            <div style="font-size:10px;color:inherit;opacity:.8;">Full access</div>
+          </div>
         </div>
       </div>
-      <button class="btn-add" onclick="addEmployee()">+ Add Employee</button>
+
+      <!-- Employee fields -->
+      <div id="fields-employee">
+        <div class="form-row">
+          <div>
+            <div class="input-label">Full Name</div>
+            <input class="input" id="newName" placeholder="e.g. Sarah Jones" type="text">
+          </div>
+          <div>
+            <div class="input-label">4-Digit PIN</div>
+            <input class="input" id="newPin" placeholder="e.g. 1234" type="number" maxlength="4" inputmode="numeric">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <div class="input-label">Mobile Number</div>
+            <input class="input" id="newMobile" placeholder="e.g. 0412 345 678" type="tel">
+          </div>
+          <div>
+            <div class="input-label">Profile Photo (optional)</div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#111;border:1px solid #333;border-radius:10px;padding:11px 12px;">
+              <span style="font-size:18px;">📷</span>
+              <span style="font-size:13px;color:#888;" id="newPhotoLabel">Choose photo…</span>
+              <input type="file" id="newPhoto" accept="image/*" style="display:none" onchange="document.getElementById('newPhotoLabel').textContent=this.files[0]?.name||'Choose photo…'">
+            </label>
+          </div>
+        </div>
+        <button class="btn-add" onclick="addEmployee()">+ Add Employee</button>
+      </div>
+
+      <!-- Client fields -->
+      <div id="fields-client" style="display:none">
+        <div class="form-row">
+          <div>
+            <div class="input-label">Company / Client Name</div>
+            <input class="input" id="newClientName" placeholder="e.g. McDonald's Penrith" type="text">
+          </div>
+          <div>
+            <div class="input-label">Login Username</div>
+            <input class="input" id="newClientUser" placeholder="e.g. penrith" type="text" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <div class="input-label">Password</div>
+            <input class="input" id="newClientPass" placeholder="Set a password" type="password" autocomplete="new-password">
+          </div>
+          <div>
+            <div class="input-label">Mobile Number (for SMS login link)</div>
+            <input class="input" id="newClientMobile" placeholder="e.g. 0412 345 678" type="tel">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <div class="input-label">Assign Sites</div>
+            <div id="clientSiteChecks" style="background:#111;border:1px solid #333;border-radius:10px;padding:10px;max-height:120px;overflow-y:auto;font-size:13px;">
+              <div style="color:#555;">Loading sites…</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" style="background:#1a3a6a;border:1px solid #2196f3;" onclick="addClient()">+ Add Client</button>
+      </div>
+
+      <!-- Admin info -->
+      <div id="fields-admin" style="display:none">
+        <div style="background:#1a1a2e;border:1px solid #3a3a6a;border-radius:12px;padding:16px;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:700;color:#90caf9;margin-bottom:8px;">🛡️ Admin Access</div>
+          <div style="font-size:13px;color:#aaa;margin-bottom:12px;">Admin login is managed separately. Use the link below to access admin settings and change the admin password.</div>
+          <a href="/home" target="_blank" style="display:inline-block;background:#1a237e;color:#90caf9;font-size:13px;font-weight:700;padding:10px 18px;border-radius:9px;text-decoration:none;">🔧 Go to Admin Dashboard →</a>
+        </div>
+      </div>
+
       <div class="form-err" id="empErr"></div>
     </div>
 
-    <div class="section-title">Your Team</div>
-    <div class="section-sub">Employees use their PIN to sign into the cleaning checklist</div>
+    <div class="section-title">All Users</div>
+    <div class="section-sub">Manage employees, clients, and admin access</div>
     <div id="empList"><div class="rl-loading"><div class="rl-ring-sm"></div>Loading…</div></div>
   </div>
 
@@ -260,10 +370,60 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
           </select>
         </div>
       </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:#888;margin-bottom:6px;">🖼️ Site Logo <span style="color:#555;">(optional)</span></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img id="newSiteLogoPreview" style="width:44px;height:44px;object-fit:contain;border-radius:8px;background:#111;border:1px solid #333;display:none;">
+          <label style="cursor:pointer;background:#1a1a1a;border:1px solid #444;color:#ccc;font-size:13px;padding:8px 14px;border-radius:8px;white-space:nowrap;">
+            Choose Logo
+            <input type="file" accept="image/*" id="newSiteLogoFile" style="display:none;"
+                   onchange="const f=this.files[0];if(f){const img=document.getElementById('newSiteLogoPreview');img.src=URL.createObjectURL(f);img.style.display='block';}">
+          </label>
+          <span id="newSiteLogoName" style="font-size:12px;color:#666;"></span>
+        </div>
+      </div>
       <button onclick="addSite()" style="background:#3d8b3d;border:none;color:#fff;font-size:14px;font-weight:700;padding:11px 24px;border-radius:10px;cursor:pointer;">Add Site</button>
     </div>
 
     <div id="siteList"><div class="rl-loading"><div class="rl-ring-sm"></div>Loading…</div></div>
+  </div>
+
+  <!-- Attendance tab -->
+  <div id="tabAttendance" style="display:none">
+    <div class="section-title">📅 Attendance Calendar</div>
+    <div class="section-sub">Track which employees attended which sites each day — for payroll</div>
+
+    <!-- Month navigation -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <button class="cal-nav-btn" onclick="changeMonth(-1)">‹</button>
+      <div id="calMonthLabel" style="font-size:17px;font-weight:900;color:#f0f0f0;"></div>
+      <button class="cal-nav-btn" onclick="changeMonth(1)">›</button>
+    </div>
+
+    <!-- Export button -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button onclick="exportPayroll()" style="background:#1a2e1a;border:1px solid #3d8b3d;color:#3d8b3d;font-size:12px;font-weight:700;padding:8px 16px;border-radius:9px;cursor:pointer;">📊 Export Payroll CSV</button>
+    </div>
+
+    <!-- Calendar grid -->
+    <div class="cal-grid" id="calGrid"></div>
+
+    <!-- Day detail card -->
+    <div id="calDayDetail" style="display:none;margin-top:16px;">
+      <div class="cal-detail-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div id="calDetailDate" style="font-size:15px;font-weight:900;color:#3d8b3d;"></div>
+          <button onclick="document.getElementById('calDayDetail').style.display='none'" style="background:none;border:none;color:#666;font-size:18px;cursor:pointer;">×</button>
+        </div>
+        <div id="calDetailBody"></div>
+      </div>
+    </div>
+
+    <!-- Monthly summary table -->
+    <div style="margin-top:20px;">
+      <div style="font-size:14px;font-weight:700;color:#aaa;margin-bottom:10px;">Monthly Summary</div>
+      <div id="calSummary"><div class="rl-loading"><div class="rl-ring-sm"></div>Loading…</div></div>
+    </div>
   </div>
 </div>
 
@@ -296,6 +456,27 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
   </div>
 </div>
 
+<!-- Edit client modal -->
+<div class="modal-bg" id="editClientModal" onclick="closeClientEditModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Edit Client</div>
+    <div class="input-label">Company / Client Name</div>
+    <input class="input" id="editClientName" style="margin-bottom:12px;">
+    <div class="input-label">Login Username</div>
+    <input class="input" id="editClientUser" style="margin-bottom:12px;" autocomplete="off">
+    <div class="input-label">New Password <span style="color:#555;font-weight:400;">(leave blank to keep current)</span></div>
+    <input class="input" id="editClientPass" placeholder="Leave blank to keep" type="password" autocomplete="new-password" style="margin-bottom:12px;">
+    <div class="input-label">Mobile Number</div>
+    <input class="input" id="editClientMobile" placeholder="0412 345 678" type="tel" style="margin-bottom:12px;">
+    <div class="input-label">Assign Sites</div>
+    <div id="editClientSiteChecks" style="background:#111;border:1px solid #333;border-radius:10px;padding:10px;max-height:140px;overflow-y:auto;font-size:13px;margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn-modal cancel" onclick="closeClientEditModal()">Cancel</button>
+      <button class="btn-modal save" onclick="saveClientEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const ALL_DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
 const DAY_LABEL = {sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'};
@@ -305,19 +486,231 @@ let editingEmpId = null;
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 function showTab(tab) {
-  document.getElementById('tabEmployees').style.display = tab==='employees'?'block':'none';
-  document.getElementById('tabSites').style.display = tab==='sites'?'block':'none';
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(tab==='employees'&&i===0)||(tab==='sites'&&i===1)));
-  if (tab==='sites') loadSites();
+  document.getElementById('tabEmployees').style.display   = tab==='employees'  ? 'block' : 'none';
+  document.getElementById('tabSites').style.display       = tab==='sites'      ? 'block' : 'none';
+  document.getElementById('tabAttendance').style.display  = tab==='attendance' ? 'block' : 'none';
+  document.querySelectorAll('.tab').forEach((t,i) =>
+    t.classList.toggle('active',
+      (tab==='employees'&&i===0)||(tab==='sites'&&i===1)||(tab==='attendance'&&i===2)));
+  if (tab==='sites')      loadSites();
+  if (tab==='attendance') loadAttendance();
 }
 
-// ── Employees ──────────────────────────────────────────────────────────────
+// ── Attendance Calendar ────────────────────────────────────────────────────
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth() + 1; // 1-12
+let calData  = {}; // { "YYYY-MM-DD": [{employee_id, employee_name, sites:[...]}] }
+let calDaysInMonth = 30;
+
+// Assign consistent colors per employee
+const EMP_COLORS = ['#4caf50','#2196f3','#ff9800','#e91e63','#9c27b0','#00bcd4','#ff5722','#8bc34a','#ffc107','#f44336'];
+let empColorMap = {};
+let colorIdx = 0;
+function empColor(eid) {
+  if (!empColorMap[eid]) empColorMap[eid] = EMP_COLORS[(colorIdx++) % EMP_COLORS.length];
+  return empColorMap[eid];
+}
+
+async function loadAttendance() {
+  const month = `${calYear}-${String(calMonth).padStart(2,'0')}`;
+  document.getElementById('calMonthLabel').textContent =
+    new Date(calYear, calMonth-1, 1).toLocaleDateString('en-AU',{month:'long',year:'numeric'});
+  document.getElementById('calGrid').innerHTML = '<div class="rl-loading" style="grid-column:1/-1"><div class="rl-ring-sm"></div>Loading…</div>';
+  document.getElementById('calSummary').innerHTML = '<div class="rl-loading"><div class="rl-ring-sm"></div></div>';
+  try {
+    const r = await fetch(`/api/attendance?month=${month}`);
+    const d = await r.json();
+    calData = d.data || {};
+    calDaysInMonth = d.days_in_month || 30;
+    renderCalendar();
+    renderSummary();
+  } catch(e) {
+    document.getElementById('calGrid').innerHTML = '<div style="color:#e53935;padding:20px;grid-column:1/-1">Error loading data</div>';
+  }
+}
+
+function changeMonth(delta) {
+  calMonth += delta;
+  if (calMonth > 12) { calMonth = 1; calYear++; }
+  if (calMonth < 1)  { calMonth = 12; calYear--; }
+  document.getElementById('calDayDetail').style.display = 'none';
+  loadAttendance();
+}
+
+function renderCalendar() {
+  const today = new Date().toISOString().slice(0,10);
+  const grid  = document.getElementById('calGrid');
+  // Day headers
+  const hdrs = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    .map(d=>`<div class="cal-day-hdr">${d}</div>`).join('');
+  // First day of month (0=Sun)
+  const firstDow = new Date(calYear, calMonth-1, 1).getDay();
+  const prefix = `${calYear}-${String(calMonth).padStart(2,'0')}`;
+  let cells = '';
+  // Empty cells before month start
+  for (let i=0; i<firstDow; i++) cells += `<div class="cal-day other-month"></div>`;
+  // Day cells
+  for (let d=1; d<=calDaysInMonth; d++) {
+    const dateStr = `${prefix}-${String(d).padStart(2,'0')}`;
+    const recs = calData[dateStr] || [];
+    const isToday = dateStr === today;
+    const hasData = recs.length > 0;
+    const dots = recs.map(emp =>
+      `<span class="cal-emp-dot" style="background:${empColor(emp.employee_id)};" title="${emp.employee_name}"></span>`
+    ).join('');
+    const siteCount = recs.reduce((n,e)=>n+e.sites.length,0);
+    cells += `<div class="cal-day${hasData?' has-data':''}${isToday?' today':''}"
+              onclick="${hasData?`showDayDetail('${dateStr}')`:''}" data-date="${dateStr}">
+      <div class="cal-day-num">${d}</div>
+      <div>${dots}</div>
+      ${siteCount?`<div class="cal-site-count">${siteCount} site${siteCount>1?'s':''}</div>`:''}
+    </div>`;
+  }
+  grid.innerHTML = hdrs + cells;
+}
+
+function showDayDetail(dateStr) {
+  const recs = calData[dateStr] || [];
+  const d = new Date(dateStr + 'T12:00:00');
+  document.getElementById('calDetailDate').textContent =
+    d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('calDetailBody').innerHTML = recs.map(emp => {
+    const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${empColor(emp.employee_id)};margin-right:6px;"></span>`;
+    const siteRows = emp.sites.map(s => {
+      const arrTime = s.arrived_at ? new Date(s.arrived_at).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+      const finTime = s.finish_time ? new Date(s.finish_time).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+      const pct     = s.total_tasks > 0 ? Math.round(s.done_tasks / s.total_tasks * 100) : 0;
+      const pctColor = pct >= 80 ? '#4caf50' : pct >= 40 ? '#f5a623' : '#888';
+      const timeStr = arrTime ? `${arrTime}${finTime?' → '+finTime:''}` : '—';
+      const durStr  = (() => {
+        if (!arrTime || !finTime) return '';
+        const mins = Math.round((new Date(s.finish_time)-new Date(s.arrived_at))/60000);
+        if (mins <= 0) return '';
+        const h = Math.floor(mins/60), m = mins%60;
+        return ` (${h?h+'h ':''} ${m}m)`;
+      })();
+      return `<div class="cal-detail-site">
+        <div class="cal-detail-site-name">${s.site_name}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="cal-detail-time">${timeStr}${durStr}</span>
+          ${s.total_tasks>0?`<span class="cal-detail-pct" style="color:${pctColor}">${pct}%</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="cal-detail-emp">
+      <div class="cal-detail-emp-name">${dot}${emp.employee_name}</div>
+      ${siteRows}
+    </div>`;
+  }).join('') || '<div style="color:#555;font-size:13px;padding:8px 0;">No attendance recorded</div>';
+  document.getElementById('calDayDetail').style.display = 'block';
+}
+
+function renderSummary() {
+  // Build employee → { date: [sites] } map
+  const empMap = {}; // emp_id → {name, days:{date:[site_names]}}
+  for (const [date, recs] of Object.entries(calData)) {
+    for (const emp of recs) {
+      if (!empMap[emp.employee_id]) empMap[emp.employee_id] = {name: emp.employee_name, days: {}};
+      empMap[emp.employee_id].days[date] = emp.sites.map(s=>s.site_name);
+    }
+  }
+  if (!Object.keys(empMap).length) {
+    document.getElementById('calSummary').innerHTML = '<div style="color:#444;font-size:13px;padding:12px 0;">No attendance data for this month.</div>';
+    return;
+  }
+  const rows = Object.entries(empMap).map(([eid, e]) => {
+    const totalDays  = Object.keys(e.days).length;
+    const totalSites = Object.values(e.days).reduce((n,s)=>n+s.length,0);
+    const daysHtml   = Object.entries(e.days)
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([dt, ss]) => {
+        const dayLabel = new Date(dt+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+        return `<div style="margin-bottom:2px;"><span style="color:#3d8b3d;font-weight:700;">${dayLabel}</span> — ${ss.join(', ')}</div>`;
+      }).join('');
+    const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${empColor(eid)};margin-right:6px;"></span>`;
+    return `<tr>
+      <td style="font-weight:700;">${dot}${e.name}</td>
+      <td style="color:#3d8b3d;font-weight:700;text-align:center;">${totalDays}</td>
+      <td style="text-align:center;color:#aaa;">${totalSites}</td>
+      <td>${daysHtml}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('calSummary').innerHTML = `
+    <div style="overflow-x:auto;">
+      <table class="cal-sum-table">
+        <thead><tr>
+          <th>Employee</th><th style="text-align:center;">Days</th>
+          <th style="text-align:center;">Sites</th><th>Attendance Detail</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function exportPayroll() {
+  const month = `${calYear}-${String(calMonth).padStart(2,'0')}`;
+  // Build CSV rows
+  const rows = [['Employee','Date','Site','Arrived','Finished','Duration (mins)','Completion %']];
+  for (const [date, recs] of Object.entries(calData).sort((a,b)=>a[0].localeCompare(b[0]))) {
+    for (const emp of recs) {
+      for (const s of emp.sites) {
+        const arrT = s.arrived_at ? new Date(s.arrived_at) : null;
+        const finT = s.finish_time ? new Date(s.finish_time) : null;
+        const dur  = arrT && finT ? Math.round((finT-arrT)/60000) : '';
+        const pct  = s.total_tasks > 0 ? Math.round(s.done_tasks/s.total_tasks*100) : '';
+        rows.push([
+          emp.employee_name,
+          date,
+          s.site_name,
+          arrT ? arrT.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false}) : '',
+          finT ? finT.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false}) : '',
+          dur,
+          pct !== '' ? pct+'%' : ''
+        ]);
+      }
+    }
+  }
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ridgeline-attendance-${month}.csv`;
+  a.click();
+}
+
+// ── Role selector ──────────────────────────────────────────────────────────
+let selectedRole = 'employee';
+
+function selectRole(role) {
+  selectedRole = role;
+  ['employee','client','admin'].forEach(r => {
+    document.getElementById('roleBtn-' + r).classList.toggle('active', r === role);
+    document.getElementById('fields-' + r).style.display = r === role ? '' : 'none';
+  });
+  if (role === 'client') populateClientSiteChecks();
+  document.getElementById('empErr').textContent = '';
+}
+
+function populateClientSiteChecks() {
+  const wrap = document.getElementById('clientSiteChecks');
+  if (!sites.length) { wrap.innerHTML = '<div style="color:#555;">No sites found</div>'; return; }
+  wrap.innerHTML = sites.map(s => `
+    <label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;">
+      <input type="checkbox" class="client-site-check" value="${s.id}" style="accent-color:#2196f3;">
+      <span>${s.name}</span>
+    </label>`).join('');
+}
+
+// ── Employees / Users ───────────────────────────────────────────────────────
+let clients = [];
+
 async function loadEmployees() {
   try {
-    const r = await fetch('/api/employees');
-    employees = await r.json();
+    const [empR, cliR] = await Promise.all([fetch('/api/employees'), fetch('/api/clients')]);
+    employees = await empR.json();
+    clients   = cliR.ok ? await cliR.json() : [];
     renderEmployees();
-  } catch(e) {}
+  } catch(e) { renderEmployees(); }
 }
 
 function empAvatarHtml(e, size=48) {
@@ -327,15 +720,11 @@ function empAvatarHtml(e, size=48) {
 
 function renderEmployees() {
   const wrap = document.getElementById('empList');
-  if (!employees.length) {
-    wrap.innerHTML='<div class="emp-empty">No employees yet. Add your first team member above.</div>';
-    return;
-  }
-  wrap.innerHTML = employees.map(e => `
+  const empCards = employees.map(e => `
     <div class="emp-card">
       <div class="emp-avatar ${e.active===false?'inactive':''}">${empAvatarHtml(e)}</div>
       <div class="emp-info">
-        <div class="emp-name">${e.name}</div>
+        <div class="emp-name">${e.name} <span class="role-badge employee">Employee</span></div>
         <div class="emp-pin">PIN: ${'•'.repeat((e.pin||'').length)} (${(e.pin||'').length} digits)
           ${e.mobile ? ` · 📱 ${e.mobile}` : ''}
         </div>
@@ -349,7 +738,39 @@ function renderEmployees() {
           : `<button class="btn-sm sms-off" title="Add a mobile number first">📲 No mobile</button>`}
         <button class="btn-sm red" onclick="deleteEmployee('${e.id}')">Delete</button>
       </div>
-    </div>`).join('');
+    </div>`);
+
+  const clientCards = clients.map(c => {
+    const siteNames = (c.sites||[]).map(sid => { const s = sites.find(x=>x.id===sid); return s?s.name:sid; }).join(', ') || 'No sites assigned';
+    const safeName  = (c.name||'').replace(/'/g,"\\'");
+    const safeUser  = (c.username||'').replace(/'/g,"\\'");
+    const safePass  = (c.password||'').replace(/'/g,"\\'");
+    const safeMob   = (c.mobile||'').replace(/'/g,"\\'");
+    return `
+    <div class="emp-card">
+      <div class="emp-avatar" style="background:#1a3a6a;font-size:20px;">🏢</div>
+      <div class="emp-info">
+        <div class="emp-name">${c.name} <span class="role-badge client">Client</span></div>
+        <div class="emp-pin">Login: ${c.username}${c.mobile ? ` · 📱 ${c.mobile}` : ''}</div>
+        <div class="emp-pin" style="margin-top:2px;">Sites: ${siteNames}</div>
+        <span class="emp-status active">Active</span>
+      </div>
+      <div class="emp-actions">
+        <button class="btn-sm" onclick="openClientEditModal('${c.id}')">Edit</button>
+        ${c.mobile
+          ? `<button class="btn-sm sms" onclick="sendClientSMS('${safeName}','${safeUser}','${safePass}','${safeMob}')">📲 Login SMS</button>`
+          : `<button class="btn-sm sms-off" title="Add a mobile number to send login SMS">📲 No mobile</button>`}
+        <button class="btn-sm red" onclick="deleteClient('${c.id}')">Delete</button>
+      </div>
+    </div>`;
+  });
+
+  const allCards = [...empCards, ...clientCards];
+  if (!allCards.length) {
+    wrap.innerHTML='<div class="emp-empty">No users yet. Add your first user above.</div>';
+    return;
+  }
+  wrap.innerHTML = allCards.join('');
 }
 
 async function addEmployee() {
@@ -366,7 +787,6 @@ async function addEmployee() {
     });
     if (r.ok) {
       const emp = await r.json();
-      // Upload photo if selected
       const photoFile = document.getElementById('newPhoto').files[0];
       if (photoFile) {
         const fd = new FormData();
@@ -381,6 +801,107 @@ async function addEmployee() {
       loadEmployees();
     }
   } catch(e) {}
+}
+
+async function addClient() {
+  const name     = document.getElementById('newClientName').value.trim();
+  const username = document.getElementById('newClientUser').value.trim().toLowerCase();
+  const password = document.getElementById('newClientPass').value;
+  const mobile   = document.getElementById('newClientMobile').value.trim();
+  const checked  = [...document.querySelectorAll('.client-site-check:checked')].map(el=>el.value);
+  document.getElementById('empErr').textContent = '';
+  if (!name)     { document.getElementById('empErr').textContent='Client name is required'; return; }
+  if (!username) { document.getElementById('empErr').textContent='Username is required'; return; }
+  if (!password) { document.getElementById('empErr').textContent='Password is required'; return; }
+  try {
+    const r = await fetch('/api/clients', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, username, password, mobile, sites: checked})
+    });
+    if (r.ok) {
+      document.getElementById('newClientName').value='';
+      document.getElementById('newClientUser').value='';
+      document.getElementById('newClientPass').value='';
+      document.getElementById('newClientMobile').value='';
+      document.querySelectorAll('.client-site-check').forEach(el=>el.checked=false);
+      loadEmployees();
+    } else {
+      const d = await r.json().catch(()=>({}));
+      document.getElementById('empErr').textContent = d.error || 'Failed to create client';
+    }
+  } catch(e) { document.getElementById('empErr').textContent='Network error'; }
+}
+
+function sendClientSMS(name, username, password, mobile) {
+  const base = window.location.origin;
+  const url  = `${base}/client/login`;
+  const msg  = `Hi ${name}, here are your Ridgeline client portal login details:\n\nURL: ${url}\nUsername: ${username}\nPassword: ${password}\n\nPlease keep these details secure.`;
+  window.location.href = `sms:${mobile}?body=${encodeURIComponent(msg)}`;
+}
+
+async function deleteClient(cid) {
+  if (!confirm('Delete this client? They will lose dashboard access.')) return;
+  try {
+    await fetch(`/api/clients/${cid}`, {method:'DELETE'});
+    loadEmployees();
+  } catch(e) {}
+}
+
+// ── Client edit modal ───────────────────────────────────────────────────────
+let editingClientId = null;
+
+function openClientEditModal(cid) {
+  const c = clients.find(x => x.id === cid);
+  if (!c) return;
+  editingClientId = cid;
+  document.getElementById('editClientName').value   = c.name    || '';
+  document.getElementById('editClientUser').value   = c.username|| '';
+  document.getElementById('editClientPass').value   = '';
+  document.getElementById('editClientMobile').value = c.mobile  || '';
+  // Populate site checkboxes with current assignments ticked
+  const wrap = document.getElementById('editClientSiteChecks');
+  if (!sites.length) {
+    wrap.innerHTML = '<div style="color:#555;">No sites found</div>';
+  } else {
+    const assigned = new Set(c.sites || []);
+    wrap.innerHTML = sites.map(s => `
+      <label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;">
+        <input type="checkbox" class="edit-client-site-check" value="${s.id}"
+          ${assigned.has(s.id) ? 'checked' : ''} style="accent-color:#2196f3;">
+        <span>${s.name}</span>
+      </label>`).join('');
+  }
+  document.getElementById('editClientModal').classList.add('open');
+}
+
+function closeClientEditModal(e) {
+  if (!e || e.target.id === 'editClientModal')
+    document.getElementById('editClientModal').classList.remove('open');
+}
+
+async function saveClientEdit() {
+  const name     = document.getElementById('editClientName').value.trim();
+  const username = document.getElementById('editClientUser').value.trim().toLowerCase();
+  const password = document.getElementById('editClientPass').value;
+  const mobile   = document.getElementById('editClientMobile').value.trim();
+  const sites_   = [...document.querySelectorAll('.edit-client-site-check:checked')].map(el => el.value);
+  if (!name)     { alert('Name is required'); return; }
+  if (!username) { alert('Username is required'); return; }
+  const payload = {name, username, mobile, sites: sites_};
+  if (password) payload.password = password;   // only send if changed
+  try {
+    const r = await fetch(`/api/clients/${editingClientId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      closeClientEditModal();
+      loadEmployees();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || 'Failed to save');
+    }
+  } catch(e) { alert('Network error'); }
 }
 
 function previewEditPhoto(input) {
@@ -681,8 +1202,18 @@ async function addSite() {
       body: JSON.stringify({name, has_kitchen})
     });
     if (!r.ok) { const d = await r.json(); alert(d.error || 'Error creating site'); return; }
+    const newSite = await r.json();
+    // Upload logo if one was selected
+    const logoFile = document.getElementById('newSiteLogoFile').files[0];
+    if (logoFile && newSite.id) {
+      const fd = new FormData(); fd.append('logo', logoFile);
+      await fetch(`/api/sites/${newSite.id}/logo`, {method:'POST', body:fd});
+    }
+    // Reset form
     document.getElementById('newSiteName').value = '';
     document.getElementById('newSiteKitchen').value = 'false';
+    document.getElementById('newSiteLogoFile').value = '';
+    document.getElementById('newSiteLogoPreview').style.display = 'none';
     await loadSites();
   } catch(e) { alert('Error creating site'); }
 }
@@ -699,6 +1230,7 @@ async function deleteSite(siteId) {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.getElementById('staffLoginUrl').textContent = window.location.origin + '/checklist';
 loadEmployees();
+loadSites(); // pre-load so client site checkboxes are ready immediately
 </script>
 </body>
 </html>

@@ -18,6 +18,29 @@ try:
 except ImportError:
     REPORTLAB = False
 
+try:
+    from PIL import Image as _PIL_Image
+    PILLOW = True
+except ImportError:
+    PILLOW = False
+
+def _safe_image_reader(path_or_buf, max_px=1600):
+    """Return an ImageReader resized to max_px on the longest side.
+    Falls back gracefully so a bad photo never crashes the PDF worker."""
+    try:
+        if PILLOW:
+            img = _PIL_Image.open(path_or_buf)
+            img = img.convert('RGB')   # normalise RGBA, P-mode, CMYK → RGB
+            img.thumbnail((max_px, max_px), _PIL_Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=82)
+            buf.seek(0)
+            return ImageReader(buf)
+        else:
+            return ImageReader(path_or_buf)
+    except Exception:
+        return None
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'ridgeline-secret-2024')
 app.permanent_session_lifetime = 86400 * 30
@@ -596,6 +619,88 @@ def api_stats():
         'accepted_quotes': sum(1 for q in quotes if q.get('status')=='accepted'),
     })
 
+# ── Cleaning KPIs API ─────────────────────────────────────────────────────────
+@app.route('/api/cleaning-kpis')
+@login_required
+def api_cleaning_kpis():
+    from collections import Counter
+    checklists = load_json(CHECKLISTS_FILE)
+    arrivals   = load_json(ARRIVALS_FILE)
+    employees  = load_json(EMPLOYEES_FILE)
+    templates  = get_templates()          # {site_id: {has_kitchen, ...}}
+
+    # Build arrival lookup: (employee_id, site_id, date_str) -> arrived_at ISO string
+    arr_map = {}
+    for a in arrivals:
+        date = (a.get('arrived_at') or '')[:10]
+        key  = (a.get('employee_id',''), a.get('site_id',''), date)
+        if key not in arr_map:
+            arr_map[key] = a.get('arrived_at','')
+
+    durations_kitchen    = []
+    durations_no_kitchen = []
+    emp_data = {}  # employee_id -> {durations:[], days:[]}
+
+    for cl in checklists:
+        sub_at = cl.get('submitted_at','') or cl.get('date','')
+        eid    = cl.get('employee_id','')
+        sid    = cl.get('site_id','')
+        if not sub_at or not eid or not sid:
+            continue
+
+        date = sub_at[:10]
+        try:
+            sub_dt = datetime.fromisoformat(sub_at)
+            dow    = sub_dt.strftime('%A')
+        except Exception:
+            dow = None
+
+        if eid not in emp_data:
+            emp_data[eid] = {'durations': [], 'days': []}
+        if dow:
+            emp_data[eid]['days'].append(dow)
+
+        arr_at = arr_map.get((eid, sid, date))
+        if arr_at:
+            try:
+                arr_dt = datetime.fromisoformat(arr_at)
+                mins   = (sub_dt - arr_dt).total_seconds() / 60
+                if 1 <= mins <= 480:   # sanity: 1 min to 8 hrs
+                    emp_data[eid]['durations'].append(mins)
+                    has_k = templates.get(sid, {}).get('has_kitchen', False)
+                    if has_k:
+                        durations_kitchen.append(mins)
+                    else:
+                        durations_no_kitchen.append(mins)
+            except Exception:
+                pass
+
+    emp_map = {e['id']: e['name'] for e in employees}
+    emp_kpis = []
+    for eid, data in emp_data.items():
+        name = emp_map.get(eid, 'Unknown')
+        avg  = round(sum(data['durations']) / len(data['durations'])) if data['durations'] else None
+        day_counts = Counter(data['days'])
+        all_days_ordered = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+        day_breakdown = {d: day_counts.get(d, 0) for d in all_days_ordered}
+        top_days = [d for d, _ in day_counts.most_common(3)]
+        emp_kpis.append({
+            'id':            eid,
+            'name':          name,
+            'avg_mins':      avg,
+            'total':         len(data['days']),
+            'top_days':      top_days,
+            'day_breakdown': day_breakdown,
+        })
+    emp_kpis.sort(key=lambda x: x['total'], reverse=True)
+
+    return jsonify({
+        'total_sites_cleaned':  len(checklists),
+        'avg_mins_kitchen':     round(sum(durations_kitchen)    / len(durations_kitchen))    if durations_kitchen    else None,
+        'avg_mins_no_kitchen':  round(sum(durations_no_kitchen) / len(durations_no_kitchen)) if durations_no_kitchen else None,
+        'employees':            emp_kpis,
+    })
+
 # ── Checklist Templates ───────────────────────────────────────────────────────
 _DAILY_COMMON = [
     {'name': 'Tables, Chairs and Sofas', 'tasks': [
@@ -862,7 +967,15 @@ def checklist_logout():
 @app.route('/checklists')
 @login_required
 def checklists_page():
-    return render_template('checklists.html')
+    return render_template('checklists.html', is_client=False, client_logo='', client_name='')
+
+@app.route('/client/checklists')
+@client_required
+def client_checklists_page():
+    return render_template('checklists.html',
+                           is_client=True,
+                           client_logo=session.get('client_logo', ''),
+                           client_name=session.get('client_name', ''))
 
 # ── Employee APIs ─────────────────────────────────────────────────────────────
 @app.route('/api/employees', methods=['GET'])
@@ -932,6 +1045,66 @@ def api_upload_emp_photo(eid):
 @app.route('/emp-photos/<filename>')
 def serve_emp_photo(filename):
     return send_from_directory(EMP_PHOTOS_DIR, filename)
+
+@app.route('/api/attendance')
+@login_required
+def api_attendance():
+    """Return attendance records grouped by date for a given month.
+    Query params: month=YYYY-MM (default: current month)
+    Returns: { "YYYY-MM-DD": [ {employee_id, employee_name, sites:[{site_id, site_name, arrived_at, finish_time, done_tasks, total_tasks}]} ] }
+    """
+    month_str = request.args.get('month', datetime.now().strftime('%Y-%m'))
+    try:
+        year, mo = map(int, month_str.split('-'))
+    except:
+        return jsonify({'error': 'Bad month format'}), 400
+
+    import calendar as cal_mod
+    _, days_in_month = cal_mod.monthrange(year, mo)
+    prefix = f'{year:04d}-{mo:02d}'
+
+    arrivals   = [a for a in load_json(ARRIVALS_FILE)   if a.get('arrived_at','').startswith(prefix)]
+    checklists = [c for c in load_json(CHECKLISTS_FILE) if c.get('date','').startswith(prefix)]
+    templates  = get_templates()
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+
+    # Map (employee_id, site_id, date) → checklist
+    cl_index = {}
+    for c in checklists:
+        key = (c.get('employee_id',''), c.get('site_id',''), c.get('date',''))
+        cl_index[key] = c
+
+    # Group by date → employee → sites
+    day_map = {}
+    for a in arrivals:
+        date = a.get('arrived_at','')[:10]
+        eid  = a.get('employee_id','')
+        sid  = a.get('site_id','')
+        ename = a.get('employee_name', eid)
+        sname = scfg.get(sid, {}).get('name') or templates.get(sid, {}).get('name', sid)
+        cl = cl_index.get((eid, sid, date), {})
+        site_rec = {
+            'site_id':    sid,
+            'site_name':  sname,
+            'arrived_at': a.get('arrived_at',''),
+            'finish_time': cl.get('submitted_at',''),
+            'done_tasks':  cl.get('done_tasks', 0),
+            'total_tasks': cl.get('total_tasks', 0),
+        }
+        if date not in day_map:
+            day_map[date] = {}
+        if eid not in day_map[date]:
+            day_map[date][eid] = {'employee_id': eid, 'employee_name': ename, 'sites': []}
+        day_map[date][eid]['sites'].append(site_rec)
+
+    # Convert to list-of-lists per day
+    result = {}
+    for date, emps in day_map.items():
+        result[date] = list(emps.values())
+
+    return jsonify({'month': month_str, 'days_in_month': days_in_month, 'data': result})
 
 # ── Checklist template API ────────────────────────────────────────────────────
 @app.route('/api/checklist/template/<site_id>')
@@ -1170,6 +1343,26 @@ def api_post_arrival():
     save_json(ARRIVALS_FILE, arrivals)
     return jsonify({'id': record['id'], 'ok': True}), 201
 
+@app.route('/api/arrivals/<arrival_id>/gps', methods=['PATCH'])
+def api_update_arrival_gps(arrival_id):
+    """Update GPS on an existing arrival (called after photo auto-save if GPS arrives late)."""
+    if not session.get('employee_id') and not session.get('logged_in'):
+        return jsonify({'error': 'Not authenticated'}), 401
+    lat = request.json.get('lat','') if request.is_json else request.form.get('lat','')
+    lng = request.json.get('lng','') if request.is_json else request.form.get('lng','')
+    accuracy = request.json.get('accuracy','') if request.is_json else request.form.get('accuracy','')
+    if not lat or not lng:
+        return jsonify({'error': 'No GPS data'}), 400
+    arrivals = load_json(ARRIVALS_FILE)
+    for a in arrivals:
+        if a.get('id') == arrival_id:
+            a['lat'] = lat
+            a['lng'] = lng
+            a['accuracy'] = accuracy
+            save_json(ARRIVALS_FILE, arrivals)
+            return jsonify({'ok': True})
+    return jsonify({'error': 'Not found'}), 404
+
 @app.route('/arrival-photos/<filename>')
 @login_required
 def arrival_photo_serve(filename):
@@ -1307,8 +1500,18 @@ def api_get_checklists():
     if emp:  cls = [c for c in cls if c.get('employee_name','').lower().find(emp.lower()) >= 0]
     return jsonify(cls)
 
+@app.route('/api/checklist/<cid>', methods=['DELETE'])
+@login_required
+def api_delete_checklist(cid):
+    checklists = load_json(CHECKLISTS_FILE)
+    new_list   = [c for c in checklists if c.get('id') != cid]
+    if len(new_list) == len(checklists):
+        return jsonify({'error': 'Not found'}), 404
+    save_json(CHECKLISTS_FILE, new_list)
+    return jsonify({'ok': True})
+
 # ── Checklist PDF ─────────────────────────────────────────────────────────────
-def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
+def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
     buf = io.BytesIO()
     if not REPORTLAB:
         buf.write(b'ReportLab not installed')
@@ -1328,30 +1531,53 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
     c = rl_canvas.Canvas(buf, pagesize=A4)
     page_y = [H]  # mutable for nested function
 
-    # McDonald's logo path (for client PDFs)
+    # Logo paths
+    _rl_logo   = os.path.join(os.path.dirname(__file__), 'static', 'logo.png')
     _mcdo_logo = os.path.join(os.path.dirname(__file__), 'static', 'mcdonalds_logo.jpg')
+    # Pre-load Ridgeline logo once (None if missing/unreadable)
+    _rl_logo_img = None
+    if os.path.exists(_rl_logo):
+        try: _rl_logo_img = _safe_image_reader(_rl_logo, max_px=400)
+        except Exception: pass
 
     def draw_header_bar():
         c.setFillColor(GREEN)
         c.rect(0, H - 76, W, 76, fill=1, stroke=0)
-        c.setFont('Helvetica-Bold', 16)
-        c.setFillColor(HexColor('#ffffff'))
-        c.drawString(M, H - 28, 'RIDGELINE SERVICES — CLEANING CHECKLIST')
-        c.setFont('Helvetica-Bold', 11)
-        c.drawString(M, H - 46, cl.get('site_name',''))
-        # McDonald's logo on client PDFs
-        if hide_employee and os.path.exists(_mcdo_logo):
+
+        # Ridgeline logo — left side of header
+        logo_w = 0
+        if _rl_logo_img:
             try:
-                logo_img = ImageReader(_mcdo_logo)
-                c.drawImage(logo_img, W - M - 56, H - 70, 56, 40,
+                logo_w = 110
+                logo_h = 52
+                c.drawImage(_rl_logo_img, M, H - 70, logo_w, logo_h,
                             preserveAspectRatio=True, mask='auto')
             except Exception:
+                logo_w = 0
+
+        txt_x = M + logo_w + (10 if logo_w else 0)
+
+        c.setFont('Helvetica-Bold', 14)
+        c.setFillColor(HexColor('#ffffff'))
+        c.drawString(txt_x, H - 28, 'RIDGELINE SERVICES — CLEANING CHECKLIST')
+        c.setFont('Helvetica-Bold', 11)
+        c.drawString(txt_x, H - 46, cl.get('site_name',''))
+
+        # McDonald's logo on client PDFs — right side
+        if hide_employee and os.path.exists(_mcdo_logo):
+            try:
+                logo_img = _safe_image_reader(_mcdo_logo)
+                if logo_img:
+                    c.drawImage(logo_img, W - M - 56, H - 70, 56, 40,
+                                preserveAspectRatio=True, mask='auto')
+            except Exception:
                 pass
+
         c.setFont('Helvetica', 9)
         c.setFillColor(HexColor('#ccffcc'))
         emp_label = "Staff Member" if hide_employee else cl.get('employee_name','')
         info = f"Date: {cl.get('date','')}  |  Day: {cl.get('day','').capitalize()}  |  Completed by: {emp_label}"
-        c.drawString(M, H - 62, info)
+        c.drawString(txt_x, H - 62, info)
         done  = cl.get('done_tasks', 0)
         total = cl.get('total_tasks', 0)
         pct   = f"{done}/{total} tasks complete"
@@ -1434,10 +1660,66 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
             c.setStrokeColor(HexColor('#eeeeee')); c.setLineWidth(0.3)
             c.line(M, y + 5, W - M, y + 5)
 
-    # Proof photos (client PDF only)
+    # ── Photos section ───────────────────────────────────────────────────────
     if include_photos:
-        proof_photos = cl.get('proof_photos', {})
+        arr_dir   = os.path.join(PHOTOS_DIR, 'arrivals')
         proof_dir = os.path.join(PHOTOS_DIR, 'proofs')
+
+        # Look up arrival photo for this checklist
+        arrivals_today = [a for a in load_json(ARRIVALS_FILE)
+                          if a.get('employee_id') == cl.get('employee_id','')
+                          and a.get('site_id')    == cl.get('site_id','')
+                          and a.get('arrived_at','').startswith(cl.get('date',''))]
+        arrival = arrivals_today[0] if arrivals_today else None
+        arr_photo_fn = arrival.get('photo','') if arrival else ''
+        arr_photo_path = os.path.join(arr_dir, arr_photo_fn) if arr_photo_fn else ''
+
+        # Arrival photo section
+        if arr_photo_path and os.path.exists(arr_photo_path):
+            if y < 100:
+                y = new_page()
+            y -= 6
+            c.setFillColor(HexColor('#2e7d32'))
+            c.rect(M, y - 3, W - 2*M, 15, fill=1, stroke=0)
+            c.setFont('Helvetica-Bold', 8)
+            c.setFillColor(HexColor('#ffffff'))
+            c.drawString(M + 4, y, 'ARRIVAL PHOTO')
+            if arrival and arrival.get('arrived_at'):
+                arr_time = arrival['arrived_at'][11:16]
+                lat = arrival.get('lat',''); lng = arrival.get('lng','')
+                gps_txt = f'  |  GPS: {lat}, {lng}' if lat and lng else ''
+                c.setFont('Helvetica', 7)
+                c.setFillColor(HexColor('#ccffcc'))
+                c.drawRightString(W - M - 4, y, f'Arrived: {arr_time}{gps_txt}')
+            y -= 10
+
+            arr_img_w = W - 2*M
+            arr_img_h = arr_img_w * 0.55
+            if y - arr_img_h < 55:
+                y = new_page()
+            arr_img = _safe_image_reader(arr_photo_path)
+            if arr_img:
+                try:
+                    c.setFillColor(HexColor('#f5f5f5'))
+                    c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=1, stroke=0)
+                    c.drawImage(arr_img, M, y - arr_img_h, arr_img_w, arr_img_h,
+                                preserveAspectRatio=True, mask='auto')
+                    c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                    c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
+                except Exception:
+                    c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                    c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
+                    c.setFont('Helvetica', 9); c.setFillColor(GREY)
+                    c.drawCentredString(W/2, y - arr_img_h/2, '[Photo could not be loaded]')
+            else:
+                c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                c.rect(M, y - arr_img_h, arr_img_w, arr_img_h, fill=0, stroke=1)
+                c.setFont('Helvetica', 9); c.setFillColor(GREY)
+                c.drawCentredString(W/2, y - arr_img_h/2, '[Photo not available]')
+            y -= arr_img_h + 14
+
+        # Proof photos section
+        proof_photos = cl.get('proof_photos', {})
         if proof_photos:
             if y < 80:
                 y = new_page()
@@ -1453,7 +1735,6 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
             photo_h = photo_w * 0.65
             col = 0
             x_positions = [M, M + photo_w + 20]
-            # Build label map from templates
             has_kitchen = get_templates().get(cl.get('site_id',''), {}).get('has_kitchen', False)
             proof_defs  = PROOF_PHOTOS_KITCHEN if has_kitchen else PROOF_PHOTOS_STANDARD
             label_map   = {p['key']: p['label'] for p in proof_defs}
@@ -1465,13 +1746,17 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
                 if y - photo_h < 55:
                     y = new_page()
                 px = x_positions[col]
-                try:
-                    img_obj = ImageReader(img_path)
-                    c.setFillColor(HexColor('#f5f5f5'))
-                    c.rect(px, y - photo_h, photo_w, photo_h, fill=1, stroke=0)
-                    c.drawImage(img_obj, px, y - photo_h, photo_w, photo_h,
-                                preserveAspectRatio=True, mask='auto')
-                except Exception:
+                img_obj = _safe_image_reader(img_path)
+                if img_obj:
+                    try:
+                        c.setFillColor(HexColor('#f5f5f5'))
+                        c.rect(px, y - photo_h, photo_w, photo_h, fill=1, stroke=0)
+                        c.drawImage(img_obj, px, y - photo_h, photo_w, photo_h,
+                                    preserveAspectRatio=True, mask='auto')
+                    except Exception:
+                        c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                        c.rect(px, y - photo_h, photo_w, photo_h, fill=0, stroke=1)
+                else:
                     c.setStrokeColor(LGREY); c.setLineWidth(0.5)
                     c.rect(px, y - photo_h, photo_w, photo_h, fill=0, stroke=1)
                 lbl = label_map.get(key, key.replace('_',' ').title())
@@ -1519,12 +1804,15 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
             raw = sig_b64.split(',')[1] if ',' in sig_b64 else sig_b64
             sig_bytes = _b64.b64decode(raw)
             sig_buf   = io.BytesIO(sig_bytes)
-            sig_img   = ImageReader(sig_buf)
-            # White background box
-            c.setFillColor(HexColor('#ffffff'))
-            c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=1, stroke=0)
-            c.drawImage(sig_img, M, y - sig_box_h, sig_box_w, sig_box_h,
-                        mask='auto', preserveAspectRatio=True)
+            sig_img   = _safe_image_reader(sig_buf, max_px=800)
+            if sig_img:
+                c.setFillColor(HexColor('#ffffff'))
+                c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=1, stroke=0)
+                c.drawImage(sig_img, M, y - sig_box_h, sig_box_w, sig_box_h,
+                            mask='auto', preserveAspectRatio=True)
+            else:
+                c.setStrokeColor(LGREY); c.setLineWidth(0.5)
+                c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=0, stroke=1)
         except Exception:
             c.setStrokeColor(LGREY); c.setLineWidth(0.5)
             c.rect(M, y - sig_box_h, sig_box_w, sig_box_h, fill=0, stroke=1)
@@ -1549,13 +1837,17 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=False):
 @app.route('/api/checklist/<cid>/pdf')
 @login_required
 def api_checklist_pdf(cid):
-    cls = load_json(CHECKLISTS_FILE)
-    cl  = next((x for x in cls if x['id'] == cid), None)
-    if not cl: return ('Not found', 404)
-    buf = _build_checklist_pdf(cl)
-    fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
-    return Response(buf, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'inline; filename={fn}'})
+    try:
+        cls = load_json(CHECKLISTS_FILE)
+        cl  = next((x for x in cls if x['id'] == cid), None)
+        if not cl: return ('Not found', 404)
+        buf = _build_checklist_pdf(cl)
+        fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
+        return Response(buf, mimetype='application/pdf',
+                        headers={'Content-Disposition': f'inline; filename={fn}'})
+    except Exception as e:
+        app.logger.error(f'PDF error for {cid}: {e}', exc_info=True)
+        return jsonify({'error': 'PDF generation failed', 'detail': str(e)}), 500
 
 # ── Client auth ───────────────────────────────────────────────────────────────
 @app.route('/client/login', methods=['GET','POST'])
@@ -1670,16 +1962,20 @@ def api_client_checklists():
 @app.route('/api/client/checklist/<cid>/pdf')
 @client_required
 def api_client_checklist_pdf(cid):
-    client_sites = session.get('client_sites', [])
-    cls = load_json(CHECKLISTS_FILE)
-    cl  = next((x for x in cls if x['id'] == cid), None)
-    if not cl: return ('Not found', 404)
-    if client_sites and cl.get('site_id') not in client_sites:
-        return ('Forbidden', 403)
-    buf = _build_checklist_pdf(cl, hide_employee=True, include_photos=True)
-    fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
-    return Response(buf, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'inline; filename={fn}'})
+    try:
+        client_sites = session.get('client_sites', [])
+        cls = load_json(CHECKLISTS_FILE)
+        cl  = next((x for x in cls if x['id'] == cid), None)
+        if not cl: return ('Not found', 404)
+        if client_sites and cl.get('site_id') not in client_sites:
+            return ('Forbidden', 403)
+        buf = _build_checklist_pdf(cl, hide_employee=True, include_photos=True)
+        fn  = f"Checklist_{cl.get('site_id','')}_{cl.get('date','')}.pdf"
+        return Response(buf, mimetype='application/pdf',
+                        headers={'Content-Disposition': f'inline; filename={fn}'})
+    except Exception as e:
+        app.logger.error(f'Client PDF error for {cid}: {e}', exc_info=True)
+        return jsonify({'error': 'PDF generation failed', 'detail': str(e)}), 500
 
 # ── Client proof photo serve ──────────────────────────────────────────────────
 @app.route('/client-proof-photos/<filename>')
@@ -1709,6 +2005,7 @@ def api_create_client():
         'name':       data.get('name','').strip(),
         'username':   data.get('username','').strip().lower(),
         'password':   data.get('password','').strip(),
+        'mobile':     data.get('mobile','').strip(),
         'sites':      data.get('sites', []),
         'active':     True,
         'created_at': datetime.now().isoformat(),
@@ -1764,6 +2061,9 @@ def api_live_status():
     site_cfgs  = load_all_site_configs()
     arrivals   = [a for a in load_json(ARRIVALS_FILE) if a.get('arrived_at','').startswith(today)]
     employees  = {e['id']: e for e in load_json(EMPLOYEES_FILE)}
+    checklists = [c for c in load_json(CHECKLISTS_FILE) if c.get('date','') == today]
+    # Map (employee_id, site_id) → checklist
+    cl_map = {(c.get('employee_id',''), c.get('site_id','')): c for c in checklists}
 
     # Read start_time / address from sites_config.json
     try:
@@ -1812,16 +2112,26 @@ def api_live_status():
                     status = 'pending'
 
             photo_fn = emp.get('photo','')
+            arr_photo = arrival.get('photo','') if arrival else ''
+            cl_rec = cl_map.get((emp['id'], sid))
+            finish_time = cl_rec.get('submitted_at','') if cl_rec else ''
+            done_tasks  = cl_rec.get('done_tasks', 0)  if cl_rec else 0
+            total_tasks = cl_rec.get('total_tasks', 0) if cl_rec else 0
             emp_statuses.append({
-                'id':           emp['id'],
-                'name':         emp['name'],
-                'mobile':       emp.get('mobile',''),
-                'photo':        f'/emp-photos/{photo_fn}' if photo_fn else '',
-                'checked_in':   bool(arrival),
-                'arrival_time': arrival_time,
-                'lat':          arrival.get('lat','')  if arrival else '',
-                'lng':          arrival.get('lng','')  if arrival else '',
-                'status':       status,
+                'id':            emp['id'],
+                'name':          emp['name'],
+                'mobile':        emp.get('mobile',''),
+                'photo':         f'/emp-photos/{photo_fn}' if photo_fn else '',
+                'arrival_photo': f'/arrival-photos/{arr_photo}' if arr_photo else '',
+                'checked_in':    bool(arrival),
+                'arrival_time':  arrival_time,
+                'finish_time':   finish_time,
+                'done_tasks':    done_tasks,
+                'total_tasks':   total_tasks,
+                'lat':           arrival.get('lat','')  if arrival else '',
+                'lng':           arrival.get('lng','')  if arrival else '',
+                'accuracy':      arrival.get('accuracy','') if arrival else '',
+                'status':        status,
             })
 
         result.append({
