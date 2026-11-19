@@ -61,14 +61,15 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 .day-pill { font-size: 9px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #1e3a1e; color: #6fcf6f; }
 .day-pill.top { background: #3d8b3d; color: #fff; }
 
-/* ── Live map ─────────────────────────────────────────── */
-.map-section { max-width: 600px; margin: 0 auto 28px; padding: 0 16px; }
-.map-heading { font-size: 13px; font-weight: 800; color: #3d8b3d; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-.map-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d8b3d; animation: rl-bounce .9s ease-in-out infinite; display: inline-block; }
-#cleanerMap { width: 100%; height: 300px; border-radius: 14px; border: 1px solid #222; overflow: hidden; }
-.map-legend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
-.map-legend-item { font-size: 11px; color: #888; background: #111; border: 1px solid #222; border-radius: 8px; padding: 4px 10px; }
-.map-no-data { height: 60px; display: flex; align-items: center; justify-content: center; color: #444; font-size: 13px; background: #111; border-radius: 14px; border: 1px solid #222; }
+/* ── Live Monitor tile (embedded map) ─────────────────── */
+.tile-map { grid-column: 1/-1; padding: 0 !important; overflow: hidden; cursor: default; }
+.tile-map-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #111; border-bottom: 1px solid #1a2e1a; border-radius: 16px 16px 0 0; text-decoration: none; color: inherit; }
+.tile-map-hdr:hover { background: #152015; }
+.map-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d8b3d; animation: rl-bounce .9s ease-in-out infinite; display: inline-block; flex-shrink: 0; }
+#cleanerMap { width: 100%; height: 260px; overflow: hidden; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 7px 14px 11px; }
+.map-legend-item { font-size: 11px; color: #888; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 4px 10px; }
+.map-no-data { height: 60px; display: flex; align-items: center; justify-content: center; color: #444; font-size: 13px; }
 
 /* ── Ridgeline loaders ───────────────────────────────────── */
 @keyframes rl-spin    { to { transform:rotate(360deg) } }
@@ -198,16 +199,6 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   </div>
 </div>
 
-<!-- Live Cleaner Map -->
-<div class="map-section">
-  <div class="map-heading">
-    <span class="map-live-dot"></span> 📍 Live Cleaner Locations
-    <span id="mapLastUpdated" style="font-size:10px;color:#444;margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0;"></span>
-  </div>
-  <div id="cleanerMap"></div>
-  <div class="map-legend" id="mapLegend"></div>
-</div>
-
 <div class="tiles">
   <a href="/quote" class="tile">
     <div class="tile-icon">📋</div>
@@ -254,11 +245,21 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
     <div class="tile-label">Clients</div>
     <div class="tile-sub">Portal access</div>
   </a>
-  <a href="/monitor" class="tile" style="border-color:#1a2e1a;">
-    <div class="tile-icon">📡</div>
-    <div class="tile-label" style="color:#3d8b3d;">Live Monitor</div>
-    <div class="tile-sub">TV dashboard</div>
-  </a>
+  <div class="tile tile-map" style="border-color:#1a2e1a;">
+    <a href="/monitor" class="tile-map-hdr">
+      <span style="font-size:22px;">📡</span>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#3d8b3d;">Live Monitor</div>
+        <div style="font-size:12px;color:#666;">Tap to open full screen</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+        <span class="map-live-dot"></span>
+        <span id="mapLastUpdated" style="font-size:10px;color:#444;"></span>
+      </div>
+    </a>
+    <div id="cleanerMap"></div>
+    <div class="map-legend" id="mapLegend"></div>
+  </div>
 </div>
 
 <script>
