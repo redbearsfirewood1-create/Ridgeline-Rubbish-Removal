@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0d0d0d">
 <title>Ridgeline — Live Monitor</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;overflow:hidden;}
@@ -315,12 +316,28 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 const HAS_MAPS   = {{ 'true' if google_maps_key else 'false' }};
 const REFRESH_SECS = 30;
 
-let map         = null;
-let mapMarkers  = [];
-let liveData    = [];
-let activeEmpId = null;
-let refreshTimeout = null;
-let siteClientMap  = {};   // {site_id: {client_name, logo_url}}
+let map             = null;
+let mapMarkers      = [];
+let livePingMarkers = [];   // Google Maps live-ping overlays
+let liveData        = [];
+let activeEmpId     = null;
+let refreshTimeout  = null;
+let siteClientMap   = {};   // {site_id: {client_name, logo_url}}
+let _leafMap        = null; // Leaflet instance (no-Google-Maps fallback)
+let _leafActive     = {};   // {emp_id: Leaflet marker}
+let _leafDone       = {};   // {key: Leaflet marker}
+let todayMapCache   = {active:[], completed:[]};
+
+// 24-hr Sydney time formatter (treats stored strings as UTC)
+function fmtMon(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const s = (isoStr.endsWith('Z') || isoStr.includes('+')) ? isoStr : isoStr + 'Z';
+    return new Date(s).toLocaleTimeString('en-AU',{
+      timeZone:'Australia/Sydney', hour:'2-digit', minute:'2-digit', hour12:false
+    });
+  } catch(e) { return isoStr.slice(11,16); }
+}
 
 // ── Clock ────────────────────────────────────────────────
 function updateClock() {
@@ -629,6 +646,8 @@ function initMap() {
     ],
   });
   if (liveData.length) updateMapMarkers(liveData);
+  if (todayMapCache.active.length || todayMapCache.completed.length)
+    updateLivePings(todayMapCache.active, todayMapCache.completed);
 }
 
 function updateMapMarkers(sites) {
@@ -703,6 +722,163 @@ function addMarker(site, lat, lng, bounds) {
   bounds.extend({lat, lng});
 }
 
+// ── Live-ping overlay (Google Maps) ─────────────────────
+function updateLivePings(active, completed) {
+  livePingMarkers.forEach(m => m.setMap(null));
+  livePingMarkers = [];
+  if (!map) return;
+
+  const EMP_COLORS = ['#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#FF5722'];
+
+  // Active employee live-ping pins
+  active.forEach((loc, i) => {
+    const lat = parseFloat(loc.lat), lng = parseFloat(loc.lng);
+    if (isNaN(lat) || isNaN(lng)) return;
+    const color = EMP_COLORS[i % EMP_COLORS.length];
+    const icon = {
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 12, fillColor: color, fillOpacity: 0.95,
+      strokeColor: '#fff', strokeWeight: 2.5
+    };
+    const marker = new google.maps.Marker({
+      map, position:{lat, lng}, icon,
+      title: loc.employee_name + ' (live)', zIndex: 999
+    });
+    const timeStr = fmtMon(loc.updated_at);
+    const info = new google.maps.InfoWindow({content:`
+      <div style="background:#111;color:#f0f0f0;padding:11px 13px;border-radius:9px;font-family:Arial,sans-serif;min-width:160px;">
+        <b style="color:${color}">${loc.employee_name}</b>
+        <span style="margin-left:6px;background:#1a3a1a;color:#4caf50;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;">LIVE</span><br>
+        <span style="font-size:11px;color:#888;">Last ping: ${timeStr}</span>
+        ${loc.site_name ? `<br><span style="font-size:11px;color:#888;">📍 ${loc.site_name}</span>` : ''}
+      </div>`});
+    marker.addListener('click', () => info.open(map, marker));
+    livePingMarkers.push(marker);
+  });
+
+  // Completed-site checkmark pins
+  completed.forEach(site => {
+    const lat = parseFloat(site.lat), lng = parseFloat(site.lng);
+    if (isNaN(lat) || isNaN(lng)) return;
+    const checkIcon = {
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 14, fillColor: '#3d8b3d', fillOpacity: 0.95,
+      strokeColor: '#fff', strokeWeight: 2
+    };
+    const marker = new google.maps.Marker({
+      map, position:{lat, lng}, icon: checkIcon,
+      label: {text:'✓', color:'#fff', fontSize:'13px', fontWeight:'bold'},
+      title: site.site_name + ' (done)', zIndex: 100
+    });
+    const arrTime = fmtMon(site.arrived_at);
+    const finTime = fmtMon(site.finished_at);
+    const photoBtn = site.photos && site.photos.length
+      ? `<div style="margin-top:7px;"><button onclick="__viewPhotos(${JSON.stringify(site.photos).replace(/"/g,"'")})" style="background:#1a2e1a;color:#4caf50;border:1px solid #2d5a2d;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;width:100%;">📸 View ${site.photos.length} photo${site.photos.length>1?'s':''}</button></div>`
+      : '';
+    const info = new google.maps.InfoWindow({content:`
+      <div style="background:#111;color:#f0f0f0;padding:11px 13px;border-radius:9px;font-family:Arial,sans-serif;min-width:180px;">
+        <b style="color:#4caf50;">✅ ${site.site_name}</b><br>
+        <span style="font-size:11px;color:#888;">👷 ${site.employee_name}</span><br>
+        <span style="font-size:11px;color:#888;">🕐 ${arrTime} → 🏁 ${finTime}</span><br>
+        <span style="font-size:11px;color:#888;">📋 ${site.done_tasks}/${site.total_tasks} tasks</span>
+        ${photoBtn}
+      </div>`});
+    marker.addListener('click', () => info.open(map, marker));
+    livePingMarkers.push(marker);
+  });
+}
+
+// Open first photo from a completed-site map popup button
+window.__viewPhotos = function(photos) {
+  if (!photos || !photos.length) return;
+  openLightbox(photos[0].url);
+};
+
+// ── Leaflet fallback (when no Google Maps key) ───────────
+const _LEAF_COLORS = ['#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#FF5722'];
+function _leafIcon(color, initials) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='34' height='42' viewBox='0 0 34 42'><path d='M17 0C7.6 0 0 7.6 0 17c0 13 17 25 17 25S34 30 34 17C34 7.6 26.4 0 17 0z' fill='${color}'/><circle cx='17' cy='17' r='11' fill='%230d0d0d' opacity='.85'/><text x='17' y='22' text-anchor='middle' font-size='10' font-weight='700' fill='${color}' font-family='Arial,sans-serif'>${initials}</text></svg>`;
+  return L.divIcon({html:svg, iconSize:[34,42], iconAnchor:[17,42], popupAnchor:[0,-44], className:''});
+}
+function _leafDoneIcon() {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='34' height='42' viewBox='0 0 34 42'><path d='M17 0C7.6 0 0 7.6 0 17c0 13 17 25 17 25S34 30 34 17C34 7.6 26.4 0 17 0z' fill='%233d8b3d'/><circle cx='17' cy='17' r='11' fill='%230d0d0d' opacity='.85'/><text x='17' y='22' text-anchor='middle' font-size='14' fill='%234caf50' font-family='Arial,sans-serif'>✓</text></svg>`;
+  return L.divIcon({html:svg, iconSize:[34,42], iconAnchor:[17,42], popupAnchor:[0,-44], className:''});
+}
+
+function updateLeafletMap(active, completed) {
+  if (!window.L) return;
+  const allPts = [...active, ...completed].filter(p =>
+    p.lat && p.lng && !isNaN(parseFloat(p.lat)) && !isNaN(parseFloat(p.lng)));
+  if (!allPts.length) {
+    if (!_leafMap) document.getElementById('mapMsg').textContent =
+      'No location data yet — cleaners will appear once they check in';
+    return;
+  }
+  if (!_leafMap) {
+    document.getElementById('mapPlaceholder').style.display = 'none';
+    const fp = allPts[0];
+    _leafMap = L.map('map', {zoomControl:true, attributionControl:false})
+                .setView([parseFloat(fp.lat), parseFloat(fp.lng)], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(_leafMap);
+  }
+  const bounds = [];
+  active.forEach((loc, i) => {
+    const lat = parseFloat(loc.lat), lng = parseFloat(loc.lng);
+    if (isNaN(lat)||isNaN(lng)) return;
+    const color = _LEAF_COLORS[i % _LEAF_COLORS.length];
+    const initials = (loc.employee_name||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+    const timeStr = fmtMon(loc.updated_at);
+    const html = `<div style="font-family:Arial,sans-serif;min-width:150px;">
+      <b style="color:${color}">${loc.employee_name}</b>
+      <span style="margin-left:5px;background:#e8f5e9;color:#2e7d32;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;">LIVE</span><br>
+      <span style="font-size:11px;color:#555;">Last ping: ${timeStr}</span>
+      ${loc.site_name ? `<br><span style="font-size:11px;color:#555;">📍 ${loc.site_name}</span>` : ''}
+    </div>`;
+    if (_leafActive[loc.employee_id]) {
+      _leafActive[loc.employee_id].setLatLng([lat,lng]).getPopup().setContent(html);
+    } else {
+      _leafActive[loc.employee_id] = L.marker([lat,lng], {icon:_leafIcon(color,initials), zIndexOffset:200})
+        .addTo(_leafMap).bindPopup(html);
+    }
+    bounds.push([lat,lng]);
+  });
+  completed.forEach(site => {
+    const lat = parseFloat(site.lat), lng = parseFloat(site.lng);
+    if (isNaN(lat)||isNaN(lng)) return;
+    const key = site.site_id + '_' + site.employee_id;
+    const arrTime = fmtMon(site.arrived_at);
+    const finTime = fmtMon(site.finished_at);
+    const photoHtml = site.photos && site.photos.length
+      ? `<br><a href="#" onclick="openLightbox('${site.photos[0].url}');return false;" style="font-size:11px;color:#2e7d32;">📸 View ${site.photos.length} photo${site.photos.length>1?'s':''}</a>`
+      : '';
+    const html = `<div style="font-family:Arial,sans-serif;min-width:160px;">
+      <b style="color:#2e7d32;">✅ ${site.site_name}</b><br>
+      <span style="font-size:11px;color:#555;">👷 ${site.employee_name}</span><br>
+      <span style="font-size:11px;color:#555;">🕐 ${arrTime} → 🏁 ${finTime}</span><br>
+      <span style="font-size:11px;color:#555;">📋 ${site.done_tasks}/${site.total_tasks} tasks</span>${photoHtml}
+    </div>`;
+    if (_leafDone[key]) {
+      _leafDone[key].setLatLng([lat,lng]).getPopup().setContent(html);
+    } else {
+      _leafDone[key] = L.marker([lat,lng], {icon:_leafDoneIcon(), zIndexOffset:100})
+        .addTo(_leafMap).bindPopup(html);
+    }
+    bounds.push([lat,lng]);
+  });
+  if (bounds.length) _leafMap.fitBounds(bounds, {padding:[30,30], maxZoom:16});
+}
+
+// ── Fetch today-map (live pings + completed sites) ───────
+async function fetchTodayMap() {
+  try {
+    const r = await fetch('/api/today-map');
+    if (!r.ok) return;
+    todayMapCache = await r.json();
+    if (map) updateLivePings(todayMapCache.active, todayMapCache.completed);
+    else     updateLeafletMap(todayMapCache.active, todayMapCache.completed);
+  } catch(e) {}
+}
+
 // ── Fetch data ───────────────────────────────────────────
 async function fetchStatus() {
   try {
@@ -712,6 +888,7 @@ async function fetchStatus() {
     renderSites(liveData);
     renderEmpBubbles(liveData);
     if (map) updateMapMarkers(liveData);
+    await fetchTodayMap();
     // Refresh detail if open
     if (activeEmpId) {
       const emp = liveData.flatMap(s=>s.employees).find(e=>e.id===activeEmpId);
@@ -744,7 +921,13 @@ function startRefreshCycle() {
 
   await fetchStatus();
   if (!HAS_MAPS) {
-    document.getElementById('mapMsg').textContent = 'Add a Google Maps API key in Render to enable the map';
+    document.getElementById('mapMsg').textContent = 'Loading live locations…';
+    // Load Leaflet JS, then render whatever today-map returned
+    const ls = document.createElement('script');
+    ls.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    ls.crossOrigin = '';
+    ls.onload = () => { updateLeafletMap(todayMapCache.active, todayMapCache.completed); };
+    document.head.appendChild(ls);
   }
   startRefreshCycle();
 })();
