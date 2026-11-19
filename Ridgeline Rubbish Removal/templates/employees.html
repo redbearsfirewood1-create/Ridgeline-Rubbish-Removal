@@ -363,12 +363,23 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
           <input class="input" id="newSiteName" placeholder="e.g. Penrith McDonald's" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;">
         </div>
         <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Site Type</div>
+          <select id="newSiteType" onchange="toggleNewKitchenField()" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+            <option value="restaurant">🍔 Restaurant</option>
+            <option value="office">🏢 Office</option>
+            <option value="construction">🏗️ Construction</option>
+          </select>
+        </div>
+      </div>
+      <div id="newKitchenRow" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
           <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
           <select id="newSiteKitchen" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
-            <option value="false">Standard Restaurant</option>
+            <option value="false">Standard (no kitchen)</option>
             <option value="true">Has Kitchen</option>
           </select>
         </div>
+        <div></div>
       </div>
       <div style="margin-bottom:14px;">
         <div style="font-size:11px;color:#888;margin-bottom:6px;">🖼️ Site Logo <span style="color:#555;">(optional)</span></div>
@@ -1012,10 +1023,13 @@ function renderSites() {
 
     card.innerHTML = `
       <div class="site-card-header">
-        <div class="site-icon">${site.logo_url ? `<img src="${site.logo_url}" style="width:36px;height:36px;object-fit:contain;border-radius:6px;">` : '🍔'}</div>
+        <div class="site-icon">${site.logo_url ? `<img src="${site.logo_url}" style="width:36px;height:36px;object-fit:contain;border-radius:6px;">` : (site.site_type==='office'?'🏢':site.site_type==='construction'?'🏗️':'🍔')}</div>
         <div class="site-info">
           <strong>${site.name}</strong>
-          <span>${site.id}</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            ${site.id}
+            <span style="font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;background:${site.site_type==='office'?'#1a2e44':site.site_type==='construction'?'#2e1e0f':'#1e2e1a'};color:${site.site_type==='office'?'#64b5f6':site.site_type==='construction'?'#ffb74d':'#81c784'};">${site.site_type==='office'?'Office':site.site_type==='construction'?'Construction':'Restaurant'}</span>
+          </span>
         </div>
         ${!site.is_builtin ? `<button onclick="deleteSite('${site.id}')" style="margin-left:auto;background:#6b1515;border:none;color:#ff6b6b;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;">🗑 Delete</button>` : ''}
       </div>
@@ -1027,13 +1041,25 @@ function renderSites() {
                  style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
         </div>
         <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Site Type</div>
+          <select id="siteType-${site.id}"
+                  style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
+            <option value="restaurant" ${(site.site_type||'restaurant')==='restaurant'?'selected':''}>🍔 Restaurant</option>
+            <option value="office"     ${site.site_type==='office'?'selected':''}>🏢 Office</option>
+            <option value="construction" ${site.site_type==='construction'?'selected':''}>🏗️ Construction</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
           <div style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
           <select id="siteKitchen-${site.id}"
                   style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
-            <option value="false" ${!site.has_kitchen?'selected':''}>Standard Restaurant</option>
+            <option value="false" ${!site.has_kitchen?'selected':''}>Standard (no kitchen)</option>
             <option value="true"  ${site.has_kitchen?'selected':''}>Has Kitchen</option>
           </select>
         </div>
+        <div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div>
@@ -1075,9 +1101,15 @@ function renderSites() {
       <div class="assign-label">Assigned Employees</div>
       <div class="emp-checks" id="empChecks-${site.id}">
         <label class="emp-check-row all-emp">
-          <input type="checkbox" id="all-${site.id}" ${!assignedEmps.length?'checked':''}
+          <input type="checkbox" id="all-${site.id}" ${!assignedEmps.length && !assignedEmps.includes('none')?'checked':''}
                  onchange="toggleAllEmployees('${site.id}', this.checked)">
           <span>All employees</span>
+        </label>
+        <label class="emp-check-row" id="emprow-${site.id}-none" style="border-left:2px solid #555;">
+          <input type="checkbox" id="empcheck-${site.id}-none"
+                 ${assignedEmps.includes('none')?'checked':''}
+                 onchange="empCheckChanged('${site.id}')">
+          <span style="color:#888;">N/A — no employee required</span>
         </label>
         ${employees.map(e=>`
           <label class="emp-check-row" id="emprow-${site.id}-${e.id}">
@@ -1155,6 +1187,9 @@ async function saveSite(siteId) {
   const allCb = document.getElementById(`all-${siteId}`);
   let assignedEmps = [];
   if (!allCb?.checked) {
+    // Check N/A option
+    const noneCb = document.getElementById(`empcheck-${siteId}-none`);
+    if (noneCb?.checked) assignedEmps.push('none');
     employees.forEach(e => {
       const cb = document.getElementById(`empcheck-${siteId}-${e.id}`);
       if (cb?.checked) assignedEmps.push(e.id);
@@ -1165,6 +1200,7 @@ async function saveSite(siteId) {
   const kitchenEl = document.getElementById(`siteKitchen-${siteId}`);
   const addressEl = document.getElementById(`siteAddress-${siteId}`);
   const startEl   = document.getElementById(`siteStart-${siteId}`);
+  const typeEl    = document.getElementById(`siteType-${siteId}`);
   const payload = {
     assigned_days: days,
     assigned_employees: assignedEmps,
@@ -1173,11 +1209,13 @@ async function saveSite(siteId) {
     has_kitchen: kitchenEl ? kitchenEl.value === 'true'  : undefined,
     address:     addressEl ? addressEl.value.trim()      : undefined,
     start_time:  startEl   ? startEl.value               : undefined,
+    site_type:   typeEl    ? typeEl.value                : undefined,
   };
   if (!payload.name)        delete payload.name;
   if (payload.has_kitchen === undefined) delete payload.has_kitchen;
   if (payload.address  === undefined)    delete payload.address;
   if (payload.start_time === undefined)  delete payload.start_time;
+  if (payload.site_type === undefined)   delete payload.site_type;
 
   try {
     await fetch(`/api/sites/${siteId}`, {
@@ -1192,14 +1230,20 @@ async function saveSite(siteId) {
   } catch(e) { alert('Error saving site config'); }
 }
 
+function toggleNewKitchenField() {
+  const type = document.getElementById('newSiteType').value;
+  document.getElementById('newKitchenRow').style.display = (type === 'restaurant') ? 'grid' : 'none';
+}
+
 async function addSite() {
   const name = document.getElementById('newSiteName').value.trim();
-  const has_kitchen = document.getElementById('newSiteKitchen').value === 'true';
+  const site_type = document.getElementById('newSiteType').value;
+  const has_kitchen = site_type === 'restaurant' ? document.getElementById('newSiteKitchen').value === 'true' : false;
   if (!name) { alert('Please enter a site name'); return; }
   try {
     const r = await fetch('/api/sites', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name, has_kitchen})
+      body: JSON.stringify({name, has_kitchen, site_type})
     });
     if (!r.ok) { const d = await r.json(); alert(d.error || 'Error creating site'); return; }
     const newSite = await r.json();

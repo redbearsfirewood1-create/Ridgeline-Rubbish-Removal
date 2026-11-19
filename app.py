@@ -751,6 +751,7 @@ SITES_FILE        = os.path.join(DATA_DIR, 'sites.json')
 ARRIVALS_FILE     = os.path.join(DATA_DIR, 'arrivals.json')
 CLIENTS_FILE      = os.path.join(DATA_DIR, 'clients.json')
 SITES_CONFIG_FILE = os.path.join(DATA_DIR, 'sites_config.json')
+LOCATIONS_FILE    = os.path.join(DATA_DIR, 'locations.json')
 CLIENT_LOGOS_DIR  = os.path.join(DATA_DIR, 'photos', 'client_logos')
 
 PROOF_PHOTOS_STANDARD = [
@@ -1157,6 +1158,7 @@ def api_get_sites():
             'id':          sid,
             'name':        t['name'],
             'has_kitchen': t.get('has_kitchen', False),
+            'site_type':   sc.get('site_type', 'restaurant'),
             'is_builtin':  sid in _BASE_TEMPLATES,
             'address':     sc.get('address', ''),
             'start_time':  sc.get('start_time', ''),
@@ -1177,12 +1179,14 @@ def api_create_site():
     while sid in templates:
         sid = f"{base_sid}_{counter}"; counter += 1
     has_kitchen = bool(data.get('has_kitchen', False))
+    site_type   = data.get('site_type', 'restaurant').strip().lower()
+    if site_type not in ('restaurant', 'office', 'construction'): site_type = 'restaurant'
     try:
         with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
     except: scfg = {}
-    scfg[sid] = {'name': name, 'has_kitchen': has_kitchen}
+    scfg[sid] = {'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type}
     with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
-    return jsonify({'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'is_builtin': False}), 201
+    return jsonify({'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type, 'is_builtin': False}), 201
 
 @app.route('/api/sites/<site_id>/logo', methods=['POST'])
 @login_required
@@ -1215,7 +1219,7 @@ def api_update_site(site_id):
     data = dict(request.get_json() or {})
     # Save name/has_kitchen/start_time/address to sites_config.json if present
     site_meta = {}
-    for key in ('name', 'has_kitchen', 'start_time', 'address'):
+    for key in ('name', 'has_kitchen', 'start_time', 'address', 'site_type'):
         if key in data: site_meta[key] = data.pop(key)
     if site_meta:
         try:
@@ -1342,6 +1346,122 @@ def api_post_arrival():
     arrivals.insert(0, record)
     save_json(ARRIVALS_FILE, arrivals)
     return jsonify({'id': record['id'], 'ok': True}), 201
+
+# ── Live location ping ────────────────────────────────────────────────────────
+@app.route('/api/location', methods=['POST'])
+def api_post_location():
+    """Employee pings their location every 5 minutes while working."""
+    if not session.get('employee_id') and not session.get('logged_in'):
+        return jsonify({'error': 'Not authenticated'}), 401
+    data = request.get_json() or {}
+    lat  = data.get('lat','')
+    lng  = data.get('lng','')
+    if not lat or not lng:
+        return jsonify({'error': 'No GPS'}), 400
+    emp_id   = session.get('employee_id', 'admin')
+    emp_name = session.get('employee_name', 'Admin')
+    try:
+        with open(LOCATIONS_FILE) as f: locs = json.load(f)
+    except: locs = {}
+    locs[emp_id] = {
+        'employee_id':   emp_id,
+        'employee_name': emp_name,
+        'lat':           lat,
+        'lng':           lng,
+        'accuracy':      data.get('accuracy',''),
+        'site_id':       data.get('site_id',''),
+        'site_name':     data.get('site_name',''),
+        'updated_at':    datetime.utcnow().isoformat() + 'Z',
+    }
+    with open(LOCATIONS_FILE, 'w') as f: json.dump(locs, f, indent=2)
+    return jsonify({'ok': True})
+
+@app.route('/api/locations')
+@login_required
+def api_get_locations():
+    """Admin fetches all recent employee locations."""
+    try:
+        with open(LOCATIONS_FILE) as f: locs = json.load(f)
+    except: locs = {}
+    # Filter out stale (older than 2 hours)
+    cutoff = datetime.utcnow().timestamp() - 7200
+    result = []
+    for emp_id, loc in locs.items():
+        try:
+            ts = datetime.fromisoformat(loc['updated_at'].replace('Z',''))
+            if ts.timestamp() >= cutoff:
+                result.append(loc)
+        except: pass
+    return jsonify(result)
+
+@app.route('/api/today-map')
+@login_required
+def api_today_map():
+    """Combined map data: active cleaner positions + completed sites with photos."""
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+
+    # ── Active locations (live pings from last 2 hours) ─────────────────────
+    try:
+        with open(LOCATIONS_FILE) as f: locs = json.load(f)
+    except: locs = {}
+    cutoff = datetime.utcnow().timestamp() - 7200
+    active = []
+    for emp_id, loc in locs.items():
+        try:
+            ts = datetime.fromisoformat(loc['updated_at'].replace('Z',''))
+            if ts.timestamp() >= cutoff:
+                active.append(loc)
+        except: pass
+
+    # ── Today's arrivals ────────────────────────────────────────────────────
+    all_arrivals = [a for a in load_json(ARRIVALS_FILE)
+                    if a.get('arrived_at','').startswith(today)]
+
+    # ── Today's submitted checklists ────────────────────────────────────────
+    all_checklists = [c for c in load_json(CHECKLISTS_FILE)
+                      if c.get('date','') == today and c.get('submitted_at')]
+
+    # ── Build completed-site entries ────────────────────────────────────────
+    completed = []
+    for cl in all_checklists:
+        # Find matching arrival for coordinates
+        arrival = next((a for a in all_arrivals
+                        if a.get('site_id') == cl.get('site_id')
+                        and a.get('employee_id') == cl.get('employee_id')), None)
+        lat = arrival.get('lat','') if arrival else ''
+        lng = arrival.get('lng','') if arrival else ''
+        if not lat or not lng:
+            continue   # no GPS — skip from map
+
+        # Build photo list: arrival photo + proof photos
+        photos = []
+        if arrival and arrival.get('photo'):
+            photos.append({
+                'url':   f"/arrival-photos/{arrival['photo']}",
+                'label': 'Arrival Photo',
+            })
+        for key, fn in (cl.get('proof_photos') or {}).items():
+            photos.append({
+                'url':   f"/proof-photos/{fn}",
+                'label': key.replace('_',' ').title(),
+            })
+
+        completed.append({
+            'site_id':       cl.get('site_id',''),
+            'site_name':     cl.get('site_name','') or cl.get('site_id',''),
+            'employee_id':   cl.get('employee_id',''),
+            'employee_name': cl.get('employee_name',''),
+            'lat':           lat,
+            'lng':           lng,
+            'arrived_at':    arrival['arrived_at'] if arrival else '',
+            'finished_at':   cl.get('submitted_at',''),
+            'done_tasks':    cl.get('done_tasks', 0),
+            'total_tasks':   cl.get('total_tasks', 0),
+            'checklist_id':  cl.get('id',''),
+            'photos':        photos,
+        })
+
+    return jsonify({'active': active, 'completed': completed})
 
 @app.route('/api/arrivals/<arrival_id>/gps', methods=['PATCH'])
 def api_update_arrival_gps(arrival_id):
@@ -1531,18 +1651,39 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
     c = rl_canvas.Canvas(buf, pagesize=A4)
     page_y = [H]  # mutable for nested function
 
-    # McDonald's logo path (for client PDFs)
+    # Logo paths
+    _rl_logo   = os.path.join(os.path.dirname(__file__), 'static', 'logo.png')
     _mcdo_logo = os.path.join(os.path.dirname(__file__), 'static', 'mcdonalds_logo.jpg')
+    # Pre-load Ridgeline logo once (None if missing/unreadable)
+    _rl_logo_img = None
+    if os.path.exists(_rl_logo):
+        try: _rl_logo_img = _safe_image_reader(_rl_logo, max_px=400)
+        except Exception: pass
 
     def draw_header_bar():
         c.setFillColor(GREEN)
         c.rect(0, H - 76, W, 76, fill=1, stroke=0)
-        c.setFont('Helvetica-Bold', 16)
+
+        # Ridgeline logo — left side of header
+        logo_w = 0
+        if _rl_logo_img:
+            try:
+                logo_w = 110
+                logo_h = 52
+                c.drawImage(_rl_logo_img, M, H - 70, logo_w, logo_h,
+                            preserveAspectRatio=True, mask='auto')
+            except Exception:
+                logo_w = 0
+
+        txt_x = M + logo_w + (10 if logo_w else 0)
+
+        c.setFont('Helvetica-Bold', 14)
         c.setFillColor(HexColor('#ffffff'))
-        c.drawString(M, H - 28, 'RIDGELINE SERVICES — CLEANING CHECKLIST')
+        c.drawString(txt_x, H - 28, 'RIDGELINE SERVICES — CLEANING CHECKLIST')
         c.setFont('Helvetica-Bold', 11)
-        c.drawString(M, H - 46, cl.get('site_name',''))
-        # McDonald's logo on client PDFs
+        c.drawString(txt_x, H - 46, cl.get('site_name',''))
+
+        # McDonald's logo on client PDFs — right side
         if hide_employee and os.path.exists(_mcdo_logo):
             try:
                 logo_img = _safe_image_reader(_mcdo_logo)
@@ -1551,11 +1692,12 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
                                 preserveAspectRatio=True, mask='auto')
             except Exception:
                 pass
+
         c.setFont('Helvetica', 9)
         c.setFillColor(HexColor('#ccffcc'))
         emp_label = "Staff Member" if hide_employee else cl.get('employee_name','')
         info = f"Date: {cl.get('date','')}  |  Day: {cl.get('day','').capitalize()}  |  Completed by: {emp_label}"
-        c.drawString(M, H - 62, info)
+        c.drawString(txt_x, H - 62, info)
         done  = cl.get('done_tasks', 0)
         total = cl.get('total_tasks', 0)
         pct   = f"{done}/{total} tasks complete"

@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ridgeline">
 <title>Ridgeline — Home</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; color: #f0f0f0; }
@@ -59,6 +60,15 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 .day-pills { display: flex; flex-wrap: wrap; gap: 4px; }
 .day-pill { font-size: 9px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #1e3a1e; color: #6fcf6f; }
 .day-pill.top { background: #3d8b3d; color: #fff; }
+
+/* ── Live map ─────────────────────────────────────────── */
+.map-section { max-width: 600px; margin: 0 auto 28px; padding: 0 16px; }
+.map-heading { font-size: 13px; font-weight: 800; color: #3d8b3d; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.map-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d8b3d; animation: rl-bounce .9s ease-in-out infinite; display: inline-block; }
+#cleanerMap { width: 100%; height: 300px; border-radius: 14px; border: 1px solid #222; overflow: hidden; }
+.map-legend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.map-legend-item { font-size: 11px; color: #888; background: #111; border: 1px solid #222; border-radius: 8px; padding: 4px 10px; }
+.map-no-data { height: 60px; display: flex; align-items: center; justify-content: center; color: #444; font-size: 13px; background: #111; border-radius: 14px; border: 1px solid #222; }
 
 /* ── Ridgeline loaders ───────────────────────────────────── */
 @keyframes rl-spin    { to { transform:rotate(360deg) } }
@@ -188,6 +198,16 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   </div>
 </div>
 
+<!-- Live Cleaner Map -->
+<div class="map-section">
+  <div class="map-heading">
+    <span class="map-live-dot"></span> 📍 Live Cleaner Locations
+    <span id="mapLastUpdated" style="font-size:10px;color:#444;margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0;"></span>
+  </div>
+  <div id="cleanerMap"></div>
+  <div class="map-legend" id="mapLegend"></div>
+</div>
+
 <div class="tiles">
   <a href="/quote" class="tile">
     <div class="tile-icon">📋</div>
@@ -294,6 +314,220 @@ fetch('/api/cleaning-kpis').then(r=>r.json()).then(d => {
 }).catch(() => {
   document.getElementById('empKpiGrid').innerHTML = '<div style="color:#444;font-size:12px;padding:8px;grid-column:1/-1;">Could not load KPIs</div>';
 });
+
+// ── Live cleaner map ─────────────────────────────────────────────────────────
+function fmtTimeAU(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const s = (isoStr.endsWith('Z') || isoStr.includes('+')) ? isoStr : isoStr + 'Z';
+    return new Date(s).toLocaleTimeString('en-AU', {
+      timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hour12: true
+    });
+  } catch(e) { return ''; }
+}
+
+let _map = null;
+let _mapMarkers  = {};   // key: employee_id  → active marker
+let _doneMarkers = {};   // key: site_id+employee_id → completed marker
+const EMP_COLORS = ['#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#FF5722','#795548'];
+
+// ── Photo modal ──────────────────────────────────────────────────────────────
+let _modalPhotos = [];
+let _modalIdx    = 0;
+
+function _buildModal() {
+  if (document.getElementById('photoModal')) return;
+  const el = document.createElement('div');
+  el.id = 'photoModal';
+  el.style.cssText = `
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;
+  `;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:560px;">
+      <span id="photoModalLabel" style="color:#ccc;font-size:13px;font-weight:700;"></span>
+      <button onclick="document.getElementById('photoModal').style.display='none'"
+              style="background:none;border:1px solid #555;color:#ccc;padding:5px 12px;border-radius:8px;cursor:pointer;font-size:13px;">✕ Close</button>
+    </div>
+    <div style="position:relative;width:100%;max-width:560px;display:flex;align-items:center;justify-content:center;">
+      <button id="photoModalPrev" onclick="photoNav(-1)"
+              style="position:absolute;left:0;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:22px;padding:8px 14px;border-radius:8px;cursor:pointer;z-index:1;">‹</button>
+      <img id="photoModalImg" src="" style="max-width:100%;max-height:65vh;border-radius:12px;object-fit:contain;" alt="">
+      <button id="photoModalNext" onclick="photoNav(1)"
+              style="position:absolute;right:0;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:22px;padding:8px 14px;border-radius:8px;cursor:pointer;z-index:1;">›</button>
+    </div>
+    <div id="photoModalCounter" style="color:#555;font-size:12px;"></div>
+    <div id="photoModalThumb" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:560px;"></div>
+  `;
+  el.addEventListener('click', e => { if (e.target === el) el.style.display='none'; });
+  document.body.appendChild(el);
+}
+
+function openPhotos(photos, startIdx) {
+  _buildModal();
+  _modalPhotos = photos;
+  _modalIdx    = startIdx || 0;
+  _renderModal();
+  document.getElementById('photoModal').style.display = 'flex';
+}
+
+function _renderModal() {
+  const p   = _modalPhotos[_modalIdx];
+  document.getElementById('photoModalImg').src   = p.url;
+  document.getElementById('photoModalLabel').textContent = p.label || '';
+  document.getElementById('photoModalCounter').textContent = `${_modalIdx+1} / ${_modalPhotos.length}`;
+  document.getElementById('photoModalPrev').style.display = _modalPhotos.length > 1 ? '' : 'none';
+  document.getElementById('photoModalNext').style.display = _modalPhotos.length > 1 ? '' : 'none';
+  // Thumbnails
+  document.getElementById('photoModalThumb').innerHTML = _modalPhotos.map((ph,i) =>
+    `<img src="${ph.url}" data-idx="${i}" onclick="photoNav(${i}-_modalIdx)"
+          style="width:52px;height:52px;object-fit:cover;border-radius:6px;cursor:pointer;
+                 border:2px solid ${i===_modalIdx?'#3d8b3d':'transparent'};opacity:${i===_modalIdx?1:.55};">`
+  ).join('');
+}
+
+function photoNav(delta) {
+  _modalIdx = (_modalIdx + delta + _modalPhotos.length) % _modalPhotos.length;
+  _renderModal();
+}
+
+// ── Map helpers ──────────────────────────────────────────────────────────────
+function _ensureMap(lat, lng) {
+  if (_map) return;
+  _map = L.map('cleanerMap', {zoomControl:true, attributionControl:false})
+           .setView([lat, lng], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(_map);
+}
+
+function _colorFor(idx) { return EMP_COLORS[idx % EMP_COLORS.length]; }
+
+function _makeActiveIcon(color, initials) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='36' height='44' viewBox='0 0 36 44'>
+    <path d='M18 0C8 0 0 8 0 18c0 14 18 26 18 26S36 32 36 18C36 8 28 0 18 0z' fill='${color}'/>
+    <circle cx='18' cy='18' r='13' fill='#fff' opacity='.92'/>
+    <text x='18' y='23' text-anchor='middle' font-size='11' font-weight='700' fill='${color}' font-family='Arial,sans-serif'>${initials}</text>
+  </svg>`;
+  return L.divIcon({html:`<div>${svg}</div>`, iconSize:[36,44], iconAnchor:[18,44], popupAnchor:[0,-46], className:''});
+}
+
+function _makeDoneIcon() {
+  // Green checkmark pin for completed sites
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='34' height='42' viewBox='0 0 34 42'>
+    <path d='M17 0C7.6 0 0 7.6 0 17c0 13 17 25 17 25S34 30 34 17C34 7.6 26.4 0 17 0z' fill='#3d8b3d'/>
+    <circle cx='17' cy='17' r='12' fill='#fff' opacity='.93'/>
+    <text x='17' y='22' text-anchor='middle' font-size='14' fill='#3d8b3d' font-family='Arial,sans-serif'>✓</text>
+  </svg>`;
+  return L.divIcon({html:`<div>${svg}</div>`, iconSize:[34,42], iconAnchor:[17,42], popupAnchor:[0,-44], className:''});
+}
+
+// ── Main refresh ─────────────────────────────────────────────────────────────
+function refreshMap() {
+  fetch('/api/today-map').then(r => r.json()).then(data => {
+    const now = new Date();
+    document.getElementById('mapLastUpdated').textContent =
+      'Updated ' + now.toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit',hour12:true});
+
+    const active    = data.active    || [];
+    const completed = data.completed || [];
+    const legend    = document.getElementById('mapLegend');
+
+    const hasData = active.length || completed.length;
+    if (!hasData && !_map) {
+      const el = document.getElementById('cleanerMap');
+      el.style.height = '60px'; el.style.display = 'flex';
+      el.style.alignItems = 'center'; el.style.justifyContent = 'center';
+      el.style.color = '#444'; el.style.fontSize = '13px';
+      el.innerHTML = 'No activity today yet';
+      legend.innerHTML = ''; return;
+    }
+
+    // Init map — centre on first point available
+    const firstPt = (active[0] || completed[0]);
+    if (firstPt) _ensureMap(parseFloat(firstPt.lat), parseFloat(firstPt.lng));
+
+    const bounds = [];
+    legend.innerHTML = '';
+
+    // ── Completed sites ──────────────────────────────────────────────────────
+    completed.forEach(site => {
+      const lat = parseFloat(site.lat), lng = parseFloat(site.lng);
+      const key = site.site_id + '_' + site.employee_id;
+      const arrTime  = fmtTimeAU(site.arrived_at);
+      const finTime  = fmtTimeAU(site.finished_at);
+      const pct      = site.total_tasks > 0
+                       ? Math.round(site.done_tasks / site.total_tasks * 100) : 0;
+      const photoBtn = site.photos && site.photos.length
+        ? `<br><button onclick="openPhotos(${JSON.stringify(site.photos).replace(/"/g,"'")},0)"
+             style="margin-top:8px;background:#3d8b3d;border:none;color:#fff;font-size:12px;
+                    font-weight:700;padding:5px 12px;border-radius:7px;cursor:pointer;">
+             📸 View ${site.photos.length} Photo${site.photos.length!==1?'s':''}
+           </button>` : '';
+      const popupHtml = `
+        <div style="min-width:180px;">
+          <b style="color:#3d8b3d;font-size:14px;">✅ ${site.site_name}</b><br>
+          <span style="font-size:12px;color:#555;">👷 ${site.employee_name}</span><br>
+          <span style="font-size:12px;color:#555;">🕐 Arrived: <b>${arrTime}</b></span><br>
+          <span style="font-size:12px;color:#555;">🏁 Finished: <b>${finTime}</b></span><br>
+          <span style="font-size:12px;color:#555;">📋 ${site.done_tasks}/${site.total_tasks} tasks (${pct}%)</span>
+          ${photoBtn}
+        </div>`;
+
+      if (_doneMarkers[key]) {
+        _doneMarkers[key].setLatLng([lat, lng]).getPopup().setContent(popupHtml);
+      } else {
+        _doneMarkers[key] = L.marker([lat, lng], {icon: _makeDoneIcon(), zIndexOffset: 100})
+          .addTo(_map).bindPopup(popupHtml, {maxWidth: 220});
+      }
+      bounds.push([lat, lng]);
+
+      legend.innerHTML += `<span class="map-legend-item"
+          style="border-left:3px solid #3d8b3d;padding-left:8px;cursor:pointer;"
+          onclick="openPhotos(${JSON.stringify(site.photos||[]).replace(/"/g,"'")},0)">
+        ✅ ${site.site_name} · ${arrTime}→${finTime}
+      </span>`;
+    });
+
+    // ── Active cleaners ──────────────────────────────────────────────────────
+    active.forEach((loc, i) => {
+      const lat  = parseFloat(loc.lat), lng = parseFloat(loc.lng);
+      const color   = _colorFor(i);
+      const initials = (loc.employee_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      const timeStr  = fmtTimeAU(loc.updated_at);
+      const siteStr  = loc.site_name ? ` · ${loc.site_name}` : '';
+      const popupHtml = `
+        <div style="min-width:160px;">
+          <b style="color:${color}">${loc.employee_name}</b>
+          <span style="display:inline-block;margin-left:6px;background:#1a3a1a;color:#6fcf6f;
+                       font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;">ACTIVE</span><br>
+          <span style="font-size:12px;color:#555;">Last ping ${timeStr}${siteStr}</span>
+        </div>`;
+
+      if (_mapMarkers[loc.employee_id]) {
+        _mapMarkers[loc.employee_id].setLatLng([lat, lng]).getPopup().setContent(popupHtml);
+      } else {
+        _mapMarkers[loc.employee_id] = L.marker([lat, lng], {icon: _makeActiveIcon(color, initials)})
+          .addTo(_map).bindPopup(popupHtml);
+      }
+      bounds.push([lat, lng]);
+
+      legend.innerHTML += `<span class="map-legend-item" style="border-left:3px solid ${color};padding-left:8px;">
+        🔵 ${loc.employee_name} · ${timeStr}${siteStr}
+      </span>`;
+    });
+
+    if (bounds.length) _map.fitBounds(bounds, {padding:[30,30], maxZoom:16});
+  }).catch(() => {});
+}
+
+// Load Leaflet then start
+(function loadLeaflet() {
+  if (window.L) { refreshMap(); setInterval(refreshMap, 60000); return; }
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  s.crossOrigin = '';
+  s.onload = () => { refreshMap(); setInterval(refreshMap, 60000); };
+  document.head.appendChild(s);
+})();
 </script>
 </body>
 </html>

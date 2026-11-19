@@ -618,6 +618,7 @@ function startSite(idx) {
     // Restore in-progress checklist — skip arrival
     currentArrivalId = saved.arrivalId;
     arrivalSaved = true;
+    startLocationPing();   // resume live tracking
     _resumeChecklist(saved);
     return;
   }
@@ -796,6 +797,7 @@ async function _saveArrival() {
       arrivalSaved = true;
       currentArrivalId = d.id;
       saveProgress();        // persist arrivalId before advancing
+      startLocationPing();   // start live location tracking
       btn.textContent = '✅ Saved — Start Checklist';
       btn.disabled = false;
       await loadChecklist(); // auto-advance to checklist
@@ -1052,7 +1054,38 @@ function _resetArrivalUI() {
   document.getElementById('locationStatus').className='location-status';
 }
 
+// ── Location ping (every 5 mins while logged in) ───────────────────────────
+let _locPingTimer = null;
+
+function _sendLocationPing() {
+  if (!currentEmployee || currentEmployee.id === 'admin') return;
+  navigator.geolocation.getCurrentPosition(pos => {
+    fetch('/api/location', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        lat:       pos.coords.latitude,
+        lng:       pos.coords.longitude,
+        accuracy:  pos.coords.accuracy,
+        site_id:   currentSite   || '',
+        site_name: currentSiteData ? currentSiteData.name : '',
+      })
+    }).catch(() => {});
+  }, () => {}, {enableHighAccuracy: false, timeout: 10000, maximumAge: 60000});
+}
+
+function startLocationPing() {
+  if (_locPingTimer) return;
+  _sendLocationPing();                           // immediate first ping
+  _locPingTimer = setInterval(_sendLocationPing, 5 * 60 * 1000);
+}
+
+function stopLocationPing() {
+  if (_locPingTimer) { clearInterval(_locPingTimer); _locPingTimer = null; }
+}
+
 function doSignOut() {
+  stopLocationPing();
   fetch('/checklist/logout');
   currentEmployee = null; currentSite = null; currentTemplate = null;
   currentArrivalId = null;
@@ -1067,6 +1100,7 @@ function doSignOut() {
 }
 
 function goToSites() {
+  stopLocationPing();
   clearProgress();
   currentSite = null; currentTemplate = null; currentArrivalId = null;
   document.getElementById('clNotes').value = '';

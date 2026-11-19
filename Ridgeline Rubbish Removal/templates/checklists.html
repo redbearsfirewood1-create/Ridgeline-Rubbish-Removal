@@ -177,6 +177,17 @@ const IS_CLIENT = {{ 'true' if is_client else 'false' }};
 const API_URL   = IS_CLIENT ? '/api/client/checklists' : '/api/checklist';
 const PDF_BASE  = IS_CLIENT ? '/api/client/checklist'  : '/api/checklist';
 
+// Server stores UTC times without 'Z'; append Z so browsers convert to local time correctly
+function fmtTimeAU(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const s = (isoStr.endsWith('Z') || isoStr.includes('+')) ? isoStr : isoStr + 'Z';
+    return new Date(s).toLocaleTimeString('en-AU', {
+      timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hour12: true
+    });
+  } catch(e) { return isoStr.slice(11,16); }
+}
+
 let allChecklists  = [];  // raw from server
 let visibleChecklists = []; // after client-side filters
 
@@ -265,7 +276,7 @@ function renderList() {
     const pct = cl.total_tasks > 0 ? Math.round(cl.done_tasks / cl.total_tasks * 100) : 0;
     const badgeCls = pct >= 80 ? 'badge-green' : 'badge-orange';
     const dateDisp = new Date(cl.date + 'T12:00:00').toLocaleDateString('en-AU', {weekday:'short',day:'numeric',month:'short',year:'numeric'});
-    const timeDisp = cl.submitted_at ? cl.submitted_at.slice(11,16) : '';
+    const timeDisp = cl.submitted_at ? fmtTimeAU(cl.submitted_at) : '';
     const empLine  = (!IS_CLIENT && cl.employee_name)
       ? `<div class="cl-emp">👤 ${cl.employee_name}</div>` : '';
     return `
