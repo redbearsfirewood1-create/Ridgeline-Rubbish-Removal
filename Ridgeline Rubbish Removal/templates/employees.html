@@ -1042,7 +1042,7 @@ function renderSites() {
         </div>
         <div>
           <div style="font-size:11px;color:#888;margin-bottom:4px;">Site Type</div>
-          <select id="siteType-${site.id}"
+          <select id="siteType-${site.id}" onchange="updatePricingPanel('${site.id}')"
                   style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
             <option value="restaurant" ${(site.site_type||'restaurant')==='restaurant'?'selected':''}>🍔 Restaurant</option>
             <option value="office"     ${site.site_type==='office'?'selected':''}>🏢 Office</option>
@@ -1053,7 +1053,7 @@ function renderSites() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
           <div style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
-          <select id="siteKitchen-${site.id}"
+          <select id="siteKitchen-${site.id}" onchange="updateKitchenPricingCols('${site.id}')"
                   style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
             <option value="false" ${!site.has_kitchen?'selected':''}>Standard (no kitchen)</option>
             <option value="true"  ${site.has_kitchen?'selected':''}>Has Kitchen</option>
@@ -1089,6 +1089,98 @@ function renderSites() {
           <span id="siteLogoStatus-${site.id}" style="font-size:12px;color:#888;"></span>
         </div>
       </div>
+
+      <!-- ── Pricing ─────────────────────────────────────────────────────── -->
+      <div style="border-top:1px solid #222;padding-top:12px;margin-bottom:14px;">
+        <div style="font-size:11px;color:#888;margin-bottom:8px;font-weight:700;letter-spacing:.5px;">💰 PRICING</div>
+
+        <!-- Restaurant -->
+        <div id="pricingRestaurant-${site.id}" style="display:${(site.site_type||'restaurant')==='restaurant'?'':'none'}">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Client Dining/wk ($)</div>
+              <input id="priceDiningWeekly-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.dining_weekly)||''}" placeholder="e.g. 1000"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div id="pricingKitchenCol-${site.id}" style="display:${site.has_kitchen?'':'none'}">
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Client Kitchen/wk ($)</div>
+              <input id="priceKitchenWeekly-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.kitchen_weekly)||''}" placeholder="e.g. 1250"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Days/Week</div>
+              <input id="priceDays-${site.id}" type="number" min="1" max="7"
+                     value="${(site.pricing&&site.pricing.days_per_week)||5}"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Dining/night ($)</div>
+              <input id="priceDiningCleaner-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.dining_cleaner_rate)||''}" placeholder="e.g. 83"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div id="pricingKitchenCleanerCol-${site.id}" style="display:${site.has_kitchen?'':'none'}">
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Kitchen/night ($)</div>
+              <input id="priceKitchenCleaner-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.kitchen_cleaner_rate)||''}" placeholder="e.g. 110"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Office -->
+        <div id="pricingOffice-${site.id}" style="display:${site.site_type==='office'?'':'none'}">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Client Rate/wk ($)</div>
+              <input id="priceOfficeWeekly-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.office_weekly)||''}" placeholder="e.g. 500"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Rate/night ($)</div>
+              <input id="priceOfficeCleaner-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.office_cleaner_rate)||''}" placeholder="e.g. 100"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Days/Week</div>
+              <input id="priceOfficeDays-${site.id}" type="number" min="1" max="7"
+                     value="${(site.pricing&&site.pricing.days_per_week)||5}"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Construction -->
+        <div id="pricingConstruction-${site.id}" style="display:${site.site_type==='construction'?'':'none'}">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Client Rate/wk ($)</div>
+              <input id="priceConstructionWeekly-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.construction_weekly)||''}" placeholder="e.g. 800"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Rate/night ($)</div>
+              <input id="priceConstructionCleaner-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.construction_cleaner_rate)||''}" placeholder="e.g. 90"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Days/Week</div>
+              <input id="priceConstructionDays-${site.id}" type="number" min="1" max="7"
+                     value="${(site.pricing&&site.pricing.days_per_week)||5}"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ── /Pricing ────────────────────────────────────────────────────── -->
 
       <div class="days-label">Active Days</div>
       <div class="days-row" id="days-${site.id}">
@@ -1201,6 +1293,27 @@ async function saveSite(siteId) {
   const addressEl = document.getElementById(`siteAddress-${siteId}`);
   const startEl   = document.getElementById(`siteStart-${siteId}`);
   const typeEl    = document.getElementById(`siteType-${siteId}`);
+  // Collect pricing fields
+  const siteTypeVal = typeEl ? typeEl.value : 'restaurant';
+  const pf = (id) => parseFloat(document.getElementById(id)?.value || 0) || 0;
+  const pi = (id, def) => parseInt(document.getElementById(id)?.value || def) || def;
+  const pricing = {};
+  if (siteTypeVal === 'restaurant') {
+    pricing.dining_weekly        = pf(`priceDiningWeekly-${siteId}`);
+    pricing.kitchen_weekly       = pf(`priceKitchenWeekly-${siteId}`);
+    pricing.dining_cleaner_rate  = pf(`priceDiningCleaner-${siteId}`);
+    pricing.kitchen_cleaner_rate = pf(`priceKitchenCleaner-${siteId}`);
+    pricing.days_per_week        = pi(`priceDays-${siteId}`, 5);
+  } else if (siteTypeVal === 'office') {
+    pricing.office_weekly       = pf(`priceOfficeWeekly-${siteId}`);
+    pricing.office_cleaner_rate = pf(`priceOfficeCleaner-${siteId}`);
+    pricing.days_per_week       = pi(`priceOfficeDays-${siteId}`, 5);
+  } else if (siteTypeVal === 'construction') {
+    pricing.construction_weekly       = pf(`priceConstructionWeekly-${siteId}`);
+    pricing.construction_cleaner_rate = pf(`priceConstructionCleaner-${siteId}`);
+    pricing.days_per_week             = pi(`priceConstructionDays-${siteId}`, 5);
+  }
+
   const payload = {
     assigned_days: days,
     assigned_employees: assignedEmps,
@@ -1210,6 +1323,7 @@ async function saveSite(siteId) {
     address:     addressEl ? addressEl.value.trim()      : undefined,
     start_time:  startEl   ? startEl.value               : undefined,
     site_type:   typeEl    ? typeEl.value                : undefined,
+    pricing,
   };
   if (!payload.name)        delete payload.name;
   if (payload.has_kitchen === undefined) delete payload.has_kitchen;
@@ -1233,6 +1347,22 @@ async function saveSite(siteId) {
 function toggleNewKitchenField() {
   const type = document.getElementById('newSiteType').value;
   document.getElementById('newKitchenRow').style.display = (type === 'restaurant') ? 'grid' : 'none';
+}
+
+function updatePricingPanel(siteId) {
+  const type = document.getElementById(`siteType-${siteId}`)?.value || 'restaurant';
+  document.getElementById(`pricingRestaurant-${siteId}`).style.display   = type === 'restaurant'   ? '' : 'none';
+  document.getElementById(`pricingOffice-${siteId}`).style.display        = type === 'office'       ? '' : 'none';
+  document.getElementById(`pricingConstruction-${siteId}`).style.display  = type === 'construction' ? '' : 'none';
+}
+
+function updateKitchenPricingCols(siteId) {
+  const hasKitchen = document.getElementById(`siteKitchen-${siteId}`)?.value === 'true';
+  const show = hasKitchen ? '' : 'none';
+  const kc = document.getElementById(`pricingKitchenCol-${siteId}`);
+  const kcc = document.getElementById(`pricingKitchenCleanerCol-${siteId}`);
+  if (kc)  kc.style.display  = show;
+  if (kcc) kcc.style.display = show;
 }
 
 async function addSite() {

@@ -276,6 +276,38 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
   </div>
 </div>
 
+<!-- Site photo panel (slides over site list) -->
+<div class="detail-panel" id="sitePhotoPanel">
+  <div class="detail-hdr">
+    <button class="detail-back" onclick="closeSitePhotos()">‹</button>
+    <div class="detail-name" id="sitePhotoName">—</div>
+    <div id="sitePhotoTimes" style="font-size:11px;color:#555;margin-left:auto;padding-right:4px;"></div>
+  </div>
+  <div class="detail-body" id="sitePhotoBody">
+    <div class="rl-loading"><div class="rl-ring-sm"></div>Loading photos…</div>
+  </div>
+</div>
+
+<!-- Employee contact bottom sheet -->
+<div id="contactModal" onclick="closeContactModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;align-items:flex-end;justify-content:center;">
+  <div onclick="event.stopPropagation()" style="background:#111;border:1px solid #222;border-radius:18px 18px 0 0;padding:22px 22px 36px;width:100%;max-width:380px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;">
+      <div id="cmAvatar" style="width:48px;height:48px;border-radius:50%;background:#1a2e1a;border:2px solid #2d5a2d;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;overflow:hidden;flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div id="cmName" style="font-size:17px;font-weight:900;"></div>
+        <div id="cmStatus" style="font-size:12px;margin-top:2px;"></div>
+      </div>
+      <button onclick="closeContactModal()" style="background:none;border:none;color:#555;font-size:22px;cursor:pointer;padding:0 4px;">✕</button>
+    </div>
+    <div id="cmNoMobile" style="display:none;font-size:12px;color:#555;text-align:center;margin-bottom:14px;">No mobile number on file</div>
+    <div style="display:flex;gap:10px;margin-bottom:12px;">
+      <a id="cmCallBtn" href="#" style="flex:1;text-align:center;background:#1a2e1a;color:#4caf50;border:1px solid #2d5a2d;padding:16px 10px;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;">📞 Call</a>
+      <a id="cmSmsBtn"  href="#" style="flex:1;text-align:center;background:#1a1a2e;color:#90caf9;border:1px solid #2a3a60;padding:16px 10px;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;">💬 SMS</a>
+    </div>
+    <button id="cmDetailBtn" style="width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#777;padding:11px;border-radius:10px;font-size:12px;cursor:pointer;">View full activity →</button>
+  </div>
+</div>
+
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
   <img id="lightboxImg" src="" alt="">
@@ -316,6 +348,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 const HAS_MAPS   = {{ 'true' if google_maps_key else 'false' }};
 const REFRESH_SECS = 30;
 
+let empDataCache    = {};   // {empId: {name,mobile,photo,status}} for contact modal
 let map             = null;
 let mapMarkers      = [];
 let livePingMarkers = [];   // Google Maps live-ping overlays
@@ -394,6 +427,9 @@ function renderEmpBubbles(sites) {
     }
   }
   const emps = Object.values(seen);
+  // Cache for contact modal (avoids string-escaping phone/photo in onclick)
+  emps.forEach(emp => { empDataCache[emp.id] = emp; });
+
   if (!emps.length) {
     col.innerHTML = '<div class="emp-col-title">Team</div><div style="font-size:11px;color:#333;padding:12px 4px;">No employees today</div>';
     return;
@@ -415,7 +451,7 @@ function renderEmpBubbles(sites) {
       ? `<img src="${emp.photo}" alt="${emp.name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
       : emp.name[0].toUpperCase();
     return `
-      <div class="emp-bubble ${activeEmpId===emp.id?'active':''}" onclick="openDetail('${emp.id}','${emp.name}','${emp.status}')">
+      <div class="emp-bubble ${activeEmpId===emp.id?'active':''}" onclick="openEmpContact('${emp.id}')" title="Tap to call / SMS"style="cursor:pointer;">
         <div class="emp-avatar" style="background:${avatarBg};">${avatarInner}</div>
         <div class="emp-info">
           <div class="emp-name-sm">${emp.name.split(' ')[0]}</div>
@@ -478,11 +514,12 @@ function renderSites(sites) {
         <div class="emp-row-lbl lbl-${e.checked_in?'green':e.status}">${lbl}</div>
       </div>`;
     }).join('');
-    return `<div class="site-card">
+    return `<div class="site-card" onclick="openSitePhotos('${site.id}','${site.name.replace(/'/g,"\\'")}',this)" style="cursor:pointer;" title="Tap to view photos">
       <div class="site-card-hdr">
         ${siteIcon}
         <div class="site-card-name">${site.name}</div>
         <div class="start-badge b-${overall}">${startLbl}</div>
+        <span style="font-size:14px;margin-left:4px;opacity:.5;">📷</span>
       </div>
       <div class="emp-rows">${rows || '<div class="not-checked">No employees assigned</div>'}</div>
     </div>`;
@@ -866,6 +903,137 @@ function updateLeafletMap(active, completed) {
     bounds.push([lat,lng]);
   });
   if (bounds.length) _leafMap.fitBounds(bounds, {padding:[30,30], maxZoom:16});
+}
+
+// ── Employee contact bottom sheet ───────────────────────
+let _cmEmpId = '', _cmEmpName = '', _cmEmpStatus = '';
+
+function openEmpContact(empId) {
+  const emp = empDataCache[empId] || {};
+  _cmEmpId = empId; _cmEmpName = emp.name || empId; _cmEmpStatus = emp.status || 'pending';
+
+  const av = document.getElementById('cmAvatar');
+  av.innerHTML = emp.photo
+    ? `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+    : (emp.name ? emp.name[0].toUpperCase() : '?');
+
+  document.getElementById('cmName').textContent = emp.name || empId;
+
+  const statusTxt   = {green:'On site',yellow:'Running late',red:'Overdue',pending:'Not started'};
+  const statusColor = {green:'#4caf50',yellow:'#f5a623',red:'#e53935',pending:'#555'};
+  const st = document.getElementById('cmStatus');
+  st.textContent = statusTxt[emp.status] || '';
+  st.style.color = statusColor[emp.status] || '#555';
+
+  const hasMobile = !!emp.mobile;
+  document.getElementById('cmNoMobile').style.display = hasMobile ? 'none' : 'block';
+  const callBtn = document.getElementById('cmCallBtn');
+  const smsBtn  = document.getElementById('cmSmsBtn');
+  callBtn.href = hasMobile ? `tel:${emp.mobile}` : '#';
+  smsBtn.href  = hasMobile ? `sms:${emp.mobile}` : '#';
+  callBtn.style.opacity = smsBtn.style.opacity = hasMobile ? '1' : '.35';
+  callBtn.style.pointerEvents = smsBtn.style.pointerEvents = hasMobile ? 'auto' : 'none';
+
+  document.getElementById('cmDetailBtn').onclick = () => {
+    closeContactModal();
+    openDetail(_cmEmpId, _cmEmpName, _cmEmpStatus);
+  };
+
+  const modal = document.getElementById('contactModal');
+  modal.style.display = 'flex';
+}
+
+function closeContactModal() {
+  document.getElementById('contactModal').style.display = 'none';
+}
+
+// ── Site photo panel ──────────────────────────────────────
+function openSitePhotos(siteId, siteName) {
+  document.getElementById('sitePhotoName').textContent = siteName;
+  document.getElementById('sitePhotoTimes').textContent = '';
+  document.getElementById('sitePhotoBody').innerHTML =
+    '<div class="rl-loading"><div class="rl-ring-sm"></div>Loading photos…</div>';
+  document.getElementById('sitePhotoPanel').classList.add('open');
+  _loadSitePhotos(siteId);
+}
+
+function closeSitePhotos() {
+  document.getElementById('sitePhotoPanel').classList.remove('open');
+}
+
+async function _loadSitePhotos(siteId) {
+  const body    = document.getElementById('sitePhotoBody');
+  const timesEl = document.getElementById('sitePhotoTimes');
+
+  // 1) Collect photos from today-map completed data (fastest, already cached)
+  const completedForSite = (todayMapCache.completed || []).filter(s => s.site_id === siteId);
+  const photoSections = [];
+
+  for (const comp of completedForSite) {
+    const arrTime = fmtMon(comp.arrived_at);
+    const finTime = fmtMon(comp.finished_at);
+    if (arrTime) timesEl.textContent = `${arrTime} → ${finTime}`;
+    if (comp.photos && comp.photos.length) {
+      photoSections.push(`
+        <div class="detail-site" style="margin-bottom:12px;">
+          <div class="detail-site-name">👷 ${comp.employee_name}</div>
+          <div class="proof-grid" style="margin-top:8px;">
+            ${comp.photos.map(p => `
+              <div class="proof-item">
+                <img class="proof-img" src="${p.url}" onclick="openLightbox('${p.url}')">
+                <div class="proof-label">${p.label}</div>
+              </div>`).join('')}
+          </div>
+        </div>`);
+    }
+  }
+
+  // 2) Enrich from API for checked-in employees (gets arrival + proof photos)
+  const liveSite = liveData.find(s => s.id === siteId);
+  if (liveSite) {
+    for (const emp of liveSite.employees.filter(e => e.checked_in)) {
+      try {
+        const r = await fetch(`/api/employee/${emp.id}/today`);
+        if (!r.ok) continue;
+        const d = await r.json();
+        const eSite = (d.sites || []).find(s => s.site_id === siteId);
+        if (!eSite) continue;
+
+        if (eSite.arrival_time) {
+          const arrT = fmtMon(eSite.arrival_time);
+          const finT = eSite.finish_time ? fmtMon(eSite.finish_time) : '';
+          timesEl.textContent = `${arrT}${finT?' → '+finT:''}`;
+        }
+
+        let empPics = '';
+        if (eSite.arrival_photo) empPics += `
+          <div class="arrival-img-wrap">
+            <div class="arrival-img-label">📸 Arrival</div>
+            <img class="arrival-img" src="${eSite.arrival_photo}" onclick="openLightbox('${eSite.arrival_photo}')">
+          </div>`;
+        if (eSite.proof_photos && eSite.proof_photos.length) empPics += `
+          <div class="proof-grid" style="margin-top:8px;">
+            ${eSite.proof_photos.map(p => `
+              <div class="proof-item">
+                <img class="proof-img" src="${p.url}" onclick="openLightbox('${p.url}')">
+                <div class="proof-label">${p.key.replace(/_/g,' ')}</div>
+              </div>`).join('')}
+          </div>`;
+
+        if (empPics) {
+          // Replace completed-cache entry if it exists, else prepend
+          const idx = photoSections.findIndex(s => s.includes(emp.name));
+          const block = `<div class="detail-site" style="margin-bottom:12px;">
+            <div class="detail-site-name">👷 ${emp.name}</div>${empPics}</div>`;
+          if (idx >= 0) photoSections[idx] = block; else photoSections.unshift(block);
+        }
+      } catch(e) {}
+    }
+  }
+
+  body.innerHTML = photoSections.length
+    ? photoSections.join('')
+    : '<div class="not-checked" style="padding:40px 0;text-align:center;">No photos uploaded yet</div>';
 }
 
 // ── Fetch today-map (live pings + completed sites) ───────

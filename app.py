@@ -701,6 +701,95 @@ def api_cleaning_kpis():
         'employees':            emp_kpis,
     })
 
+# ── Revenue Summary API ───────────────────────────────────────────────────────
+@app.route('/api/revenue-summary')
+@login_required
+def api_revenue_summary():
+    from datetime import timedelta
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+    templates   = get_templates()
+    checklists  = load_json(CHECKLISTS_FILE)
+
+    # Build per-site revenue model
+    weekly_contracted = weekly_labor_contracted = 0.0
+    site_rev_map = {}
+    sites_summary = []
+
+    for sid, t in templates.items():
+        sc       = scfg.get(sid, {})
+        pricing  = sc.get('pricing', {})
+        stype    = sc.get('site_type', 'restaurant')
+        has_k    = sc.get('has_kitchen', t.get('has_kitchen', False))
+        days     = max(1, int(pricing.get('days_per_week') or 5))
+
+        if stype == 'restaurant':
+            w_rev = float(pricing.get('dining_weekly') or 0)
+            if has_k: w_rev += float(pricing.get('kitchen_weekly') or 0)
+            nightly_lab  = float(pricing.get('dining_cleaner_rate') or 0)
+            if has_k: nightly_lab += float(pricing.get('kitchen_cleaner_rate') or 0)
+            w_lab = nightly_lab * days
+        elif stype == 'office':
+            w_rev = float(pricing.get('office_weekly') or 0)
+            w_lab = float(pricing.get('office_cleaner_rate') or 0) * days
+        elif stype == 'construction':
+            w_rev = float(pricing.get('construction_weekly') or 0)
+            w_lab = float(pricing.get('construction_cleaner_rate') or 0) * days
+        else:
+            w_rev = w_lab = 0.0
+
+        pv_rev = w_rev / days
+        pv_lab = w_lab / days
+
+        weekly_contracted       += w_rev
+        weekly_labor_contracted += w_lab
+
+        entry = {
+            'id': sid, 'name': sc.get('name', t['name']),
+            'site_type': stype, 'has_kitchen': has_k,
+            'days_per_week': days,
+            'weekly_revenue': round(w_rev, 2),
+            'weekly_labor':   round(w_lab, 2),
+            'weekly_profit':  round(w_rev - w_lab, 2),
+            'per_visit_revenue': round(pv_rev, 2),
+            'per_visit_labor':   round(pv_lab, 2),
+        }
+        site_rev_map[sid] = entry
+        sites_summary.append(entry)
+
+    # Actual revenue/labor from completed checklists this week + this month
+    now         = datetime.utcnow()
+    week_start  = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    wa = ma = wl = ml = 0.0
+
+    for cl in checklists:
+        raw = cl.get('submitted_at') or cl.get('date') or ''
+        if not raw: continue
+        try:    sub_dt = datetime.fromisoformat(raw.replace('Z', ''))
+        except: continue
+        srv = site_rev_map.get(cl.get('site_id', ''))
+        if not srv: continue
+        if sub_dt >= week_start:
+            wa += srv['per_visit_revenue']; wl += srv['per_visit_labor']
+        if sub_dt >= month_start:
+            ma += srv['per_visit_revenue']; ml += srv['per_visit_labor']
+
+    return jsonify({
+        'weekly_contracted':        round(weekly_contracted, 2),
+        'weekly_labor_contracted':  round(weekly_labor_contracted, 2),
+        'weekly_profit_contracted': round(weekly_contracted - weekly_labor_contracted, 2),
+        'month_contracted':         round(weekly_contracted * 52 / 12, 2),
+        'week_actual_revenue':      round(wa, 2),
+        'week_actual_labor':        round(wl, 2),
+        'week_actual_profit':       round(wa - wl, 2),
+        'month_actual_revenue':     round(ma, 2),
+        'month_actual_labor':       round(ml, 2),
+        'month_actual_profit':      round(ma - ml, 2),
+        'sites': sites_summary,
+    })
+
 # ── Checklist Templates ───────────────────────────────────────────────────────
 _DAILY_COMMON = [
     {'name': 'Tables, Chairs and Sofas', 'tasks': [
@@ -1163,6 +1252,7 @@ def api_get_sites():
             'address':     sc.get('address', ''),
             'start_time':  sc.get('start_time', ''),
             'logo_url':    f'/site-logos/{logo}' if logo else '',
+            'pricing':     sc.get('pricing', {}),
             **cfg,
         })
     return jsonify(result)
@@ -1219,7 +1309,7 @@ def api_update_site(site_id):
     data = dict(request.get_json() or {})
     # Save name/has_kitchen/start_time/address to sites_config.json if present
     site_meta = {}
-    for key in ('name', 'has_kitchen', 'start_time', 'address', 'site_type'):
+    for key in ('name', 'has_kitchen', 'start_time', 'address', 'site_type', 'pricing'):
         if key in data: site_meta[key] = data.pop(key)
     if site_meta:
         try:
