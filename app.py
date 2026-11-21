@@ -1,5 +1,10 @@
 import os, json, uuid, shutil, io, smtplib, re
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+SYDNEY_TZ = ZoneInfo('Australia/Sydney')
+def sydney_now():
+    """Return current datetime in Sydney local time (handles AEST/AEDT automatically)."""
+    return datetime.now(SYDNEY_TZ)
 from functools import wraps
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -203,7 +208,7 @@ def api_create_quote():
     quote = {
         'id':             str(uuid.uuid4()),
         'quote_number':   next_quote_number(quotes),
-        'created_at':     datetime.now().isoformat(),
+        'created_at':     sydney_now().isoformat(),
         'customer_name':  data.get('customer_name',''),
         'mobile':         data.get('mobile',''),
         'address':        data.get('address',''),
@@ -508,8 +513,8 @@ def api_create_expense():
     expenses = load_json(EXPENSES_FILE)
     exp = {
         'id':          str(uuid.uuid4()),
-        'created_at':  datetime.now().isoformat(),
-        'date':        data.get('date', datetime.now().strftime('%Y-%m-%d')),
+        'created_at':  sydney_now().isoformat(),
+        'date':        data.get('date', sydney_now().strftime('%Y-%m-%d')),
         'category':    data.get('category',''),
         'description': data.get('description',''),
         'amount':      float(data.get('amount', 0)),
@@ -543,7 +548,7 @@ def api_schedule():
 @login_required
 def api_schedule_month():
     """Return count of scheduled jobs per day for a given month (YYYY-MM)."""
-    month = request.args.get('month', datetime.now().strftime('%Y-%m'))
+    month = request.args.get('month', sydney_now().strftime('%Y-%m'))
     quotes = load_json(QUOTES_FILE)
     counts = {}
     for q in quotes:
@@ -606,7 +611,7 @@ def api_delete_truck(tid):
 def api_stats():
     quotes   = load_json(QUOTES_FILE)
     expenses = load_json(EXPENSES_FILE)
-    now = datetime.now()
+    now = sydney_now()
     this_month = now.strftime('%Y-%m')
     mq = [q for q in quotes if q.get('created_at','').startswith(this_month)]
     me = [e for e in expenses if e.get('date','').startswith(this_month)]
@@ -759,15 +764,17 @@ def api_revenue_summary():
         sites_summary.append(entry)
 
     # Actual revenue/labor from completed checklists this week + this month
-    now         = datetime.utcnow()
-    week_start  = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    now         = sydney_now()
+    week_start  = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     wa = ma = wl = ml = 0.0
 
     for cl in checklists:
         raw = cl.get('submitted_at') or cl.get('date') or ''
         if not raw: continue
-        try:    sub_dt = datetime.fromisoformat(raw.replace('Z', ''))
+        try:
+            sub_dt = datetime.fromisoformat(raw.replace('Z', ''))
+            if sub_dt.tzinfo is None: sub_dt = sub_dt.replace(tzinfo=SYDNEY_TZ)
         except: continue
         srv = site_rev_map.get(cl.get('site_id', ''))
         if not srv: continue
@@ -920,7 +927,7 @@ _BASE_TEMPLATES = {
 _DAY_NAMES = ['mon','tue','wed','thu','fri','sat','sun']  # weekday() 0=Mon…6=Sun
 
 def _today_day_abbr():
-    return _DAY_NAMES[datetime.now().weekday()]
+    return _DAY_NAMES[sydney_now().weekday()]
 
 def get_templates():
     """Return all site templates: hardcoded base sites + any user-added sites from sites_config.json."""
@@ -1001,7 +1008,7 @@ def checklist_login():
             # Wrong PIN — re-render login with error shown inline
             return render_template('checklist.html',
                 templates=get_templates(),
-                today=datetime.now().strftime('%Y-%m-%d'),
+                today=sydney_now().strftime('%Y-%m-%d'),
                 day=_today_day_abbr(),
                 session_emp_id='',
                 session_emp_name='',
@@ -1010,7 +1017,7 @@ def checklist_login():
             )
     return render_template('checklist.html',
         templates=get_templates(),
-        today=datetime.now().strftime('%Y-%m-%d'),
+        today=sydney_now().strftime('%Y-%m-%d'),
         day=_today_day_abbr(),
         session_emp_id=session.get('employee_id',''),
         session_emp_name=session.get('employee_name','')
@@ -1042,7 +1049,7 @@ def checklist_home():
         return redirect(url_for('staff_login'))
     return render_template('checklist.html',
         templates=get_templates(),
-        today=datetime.now().strftime('%Y-%m-%d'),
+        today=sydney_now().strftime('%Y-%m-%d'),
         day=_today_day_abbr(),
         session_emp_id=emp_id,
         session_emp_name=emp_name,
@@ -1143,7 +1150,7 @@ def api_attendance():
     Query params: month=YYYY-MM (default: current month)
     Returns: { "YYYY-MM-DD": [ {employee_id, employee_name, sites:[{site_id, site_name, arrived_at, finish_time, done_tasks, total_tasks}]} ] }
     """
-    month_str = request.args.get('month', datetime.now().strftime('%Y-%m'))
+    month_str = request.args.get('month', sydney_now().strftime('%Y-%m'))
     try:
         year, mo = map(int, month_str.split('-'))
     except:
@@ -1417,7 +1424,7 @@ def api_post_arrival():
         'employee_name': session.get('employee_name','Admin'),
         'site_id':       request.form.get('site_id',''),
         'site_name':     get_templates().get(request.form.get('site_id',''), {}).get('name',''),
-        'arrived_at':    datetime.now().isoformat(),
+        'arrived_at':    sydney_now().isoformat(),
         'lat':           request.form.get('lat',''),
         'lng':           request.form.get('lng',''),
         'accuracy':      request.form.get('accuracy',''),
@@ -1488,7 +1495,7 @@ def api_get_locations():
 @login_required
 def api_today_map():
     """Combined map data: active cleaner positions + completed sites with photos."""
-    today = datetime.utcnow().strftime('%Y-%m-%d')
+    today = sydney_now().strftime('%Y-%m-%d')
 
     # ── Active locations (live pings from last 2 hours) ─────────────────────
     try:
@@ -1582,8 +1589,8 @@ def arrival_photo_serve(filename):
 @login_required
 def api_employee_today(eid):
     """Returns today's activity for one employee: sites, arrival photo, proof photos."""
-    today      = datetime.now().strftime('%Y-%m-%d')
-    today_abbr = datetime.now().strftime('%a').lower()
+    today      = sydney_now().strftime('%Y-%m-%d')
+    today_abbr = sydney_now().strftime('%a').lower()
     templates  = get_templates()
     all_cfg    = load_all_site_configs()
 
@@ -1668,11 +1675,11 @@ def api_submit_checklist():
         'id':            str(uuid.uuid4()),
         'site_id':       data.get('site_id',''),
         'site_name':     data.get('site_name',''),
-        'date':          data.get('date', datetime.now().strftime('%Y-%m-%d')),
+        'date':          data.get('date', sydney_now().strftime('%Y-%m-%d')),
         'day':           data.get('day',''),
         'employee_id':   session.get('employee_id','admin'),
         'employee_name': session.get('employee_name', 'Admin'),
-        'submitted_at':  datetime.now().isoformat(),
+        'submitted_at':  sydney_now().isoformat(),
         'daily_items':   data.get('daily_items', {}),
         'weekly_items':  data.get('weekly_items', {}),
         'notes':            data.get('notes',''),
@@ -2106,7 +2113,7 @@ def serve_client_logo(filename):
 @client_required
 def api_client_stats():
     from datetime import timedelta
-    today      = datetime.now()
+    today      = sydney_now()
     week_start = today - timedelta(days=today.weekday())
     week_end   = week_start + timedelta(days=6)
     ws = week_start.strftime('%Y-%m-%d')
@@ -2218,7 +2225,7 @@ def api_create_client():
         'mobile':     data.get('mobile','').strip(),
         'sites':      data.get('sites', []),
         'active':     True,
-        'created_at': datetime.now().isoformat(),
+        'created_at': sydney_now().isoformat(),
     }
     clients.append(client)
     save_json(CLIENTS_FILE, clients)
@@ -2263,7 +2270,7 @@ def api_upload_client_logo(cid):
 def api_live_status():
     """TV dashboard: today's sites with employee check-in status and colour coding."""
     from datetime import timedelta
-    now      = datetime.now()
+    now      = sydney_now()
     today    = now.strftime('%Y-%m-%d')
     today_abbr = now.strftime('%a').lower()  # mon, tue …
 

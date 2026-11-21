@@ -197,6 +197,37 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   <div class="emp-kpi-grid" id="empKpiGrid">
     <div style="color:#444;font-size:13px;padding:8px;">Loading…</div>
   </div>
+
+  <div class="kpi-heading" style="margin-top:20px;">💰 Revenue — This Week</div>
+  <div class="kpi-row" id="revRow">
+    <div class="kpi-card">
+      <div class="kpi-num" id="revEarned">—</div>
+      <div class="kpi-unit">AUD</div>
+      <div class="kpi-lbl">Earned</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" id="revLabor">—</div>
+      <div class="kpi-unit">AUD</div>
+      <div class="kpi-lbl">Labor Cost</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" id="revProfit">—</div>
+      <div class="kpi-unit">AUD</div>
+      <div class="kpi-lbl">Profit</div>
+    </div>
+  </div>
+  <div class="kpi-row" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
+    <div class="kpi-card">
+      <div class="kpi-num" id="revContracted">—</div>
+      <div class="kpi-unit">AUD/mo</div>
+      <div class="kpi-lbl">Contracted (monthly)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" id="revProfitContracted">—</div>
+      <div class="kpi-unit">AUD/mo</div>
+      <div class="kpi-lbl">Expected Profit</div>
+    </div>
+  </div>
 </div>
 
 <div class="tiles">
@@ -315,6 +346,22 @@ fetch('/api/cleaning-kpis').then(r=>r.json()).then(d => {
 }).catch(() => {
   document.getElementById('empKpiGrid').innerHTML = '<div style="color:#444;font-size:12px;padding:8px;grid-column:1/-1;">Could not load KPIs</div>';
 });
+
+// ── Revenue summary ───────────────────────────────────────────────────────────
+function fmtAUD(n) {
+  if (n == null || isNaN(n)) return '—';
+  return '$' + Number(n).toLocaleString('en-AU', {maximumFractionDigits:0});
+}
+fetch('/api/revenue-summary').then(r=>r.json()).then(d => {
+  document.getElementById('revEarned').textContent = fmtAUD(d.week_actual_revenue);
+  document.getElementById('revLabor').textContent  = fmtAUD(d.week_actual_labor);
+  const profit = d.week_actual_profit;
+  const profitEl = document.getElementById('revProfit');
+  profitEl.textContent  = fmtAUD(profit);
+  profitEl.style.color  = (profit >= 0) ? '#4caf50' : '#ef5350';
+  document.getElementById('revContracted').textContent       = fmtAUD(d.month_contracted);
+  document.getElementById('revProfitContracted').textContent = fmtAUD(d.weekly_profit_contracted * 52 / 12);
+}).catch(() => {});
 
 // ── Live cleaner map ─────────────────────────────────────────────────────────
 function fmtTimeAU(isoStr) {
