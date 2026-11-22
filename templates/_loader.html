@@ -1,0 +1,42 @@
+<!-- ── Page loader — shown while page assets + first API calls settle ── -->
+<div id="pg-loader">
+  <img src="/static/logo.png" alt="Ridgeline" id="pg-loader-img" onerror="this.style.display='none'">
+  <div id="pg-loader-text">Loading…</div>
+</div>
+<style>
+#pg-loader{
+  position:fixed;inset:0;z-index:99999;
+  background:#0d0d0d;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .45s ease;
+}
+#pg-loader-img{
+  width:72px;height:72px;object-fit:contain;
+  animation:pgPulse 1.1s ease-in-out infinite alternate;
+  filter:drop-shadow(0 0 12px rgba(61,139,61,.55));
+}
+#pg-loader-text{
+  margin-top:18px;
+  font-size:11px;font-family:system-ui,-apple-system,sans-serif;
+  font-weight:700;letter-spacing:3px;text-transform:uppercase;
+  color:#3d8b3d;opacity:.8;
+}
+@keyframes pgPulse{
+  from{opacity:.45;transform:scale(.93)}
+  to  {opacity:1;  transform:scale(1.07)}
+}
+</style>
+<script>
+(function(){
+  function hideLoader(){
+    var l=document.getElementById('pg-loader');
+    if(!l)return;
+    l.style.opacity='0';
+    setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},480);
+  }
+  if(document.readyState==='complete'){hideLoader();}
+  else{window.addEventListener('load',hideLoader);}
+  /* Safety net — always hide after 4s even if something stalls */
+  setTimeout(hideLoader,4000);
+})();
+</script>

@@ -1,4 +1,4 @@
-import os, json, uuid, shutil, io, smtplib, re
+import os, json, uuid, shutil, io, smtplib, re, fcntl, threading
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 SYDNEY_TZ = ZoneInfo('Australia/Sydney')
@@ -12,6 +12,7 @@ from email.mime.application import MIMEApplication
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, jsonify, send_from_directory, Response)
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
     from reportlab.pdfgen import canvas as rl_canvas
@@ -47,7 +48,7 @@ def _safe_image_reader(path_or_buf, max_px=1600):
         return None
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'ridgeline-secret-2024')
+app.secret_key = os.environ.get('SECRET_KEY') or os.urandom(32)
 app.permanent_session_lifetime = 86400 * 30
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -90,13 +91,22 @@ def ensure_dirs():
     for d in (DATA_DIR, PHOTOS_DIR, CLIENT_LOGOS_DIR, EMP_PHOTOS_DIR, SITE_LOGOS_DIR):
         os.makedirs(d, exist_ok=True)
 
+_json_lock = threading.Lock()
+
 def load_json(path):
     try:
         with open(path) as f: return json.load(f)
     except: return []
 
 def save_json(path, data):
-    with open(path, 'w') as f: json.dump(data, f, indent=2)
+    """Atomic write: write to .tmp then rename so a crash never corrupts the file."""
+    tmp = path + '.tmp'
+    with _json_lock:
+        with open(tmp, 'w') as f:
+            try: fcntl.flock(f, fcntl.LOCK_EX)
+            except (AttributeError, OSError): pass   # Windows dev env fallback
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
 
 def next_quote_number(quotes):
     nums = [int(q.get('quote_number','Q0').replace('Q','')) for q in quotes if q.get('quote_number','').startswith('Q')]
@@ -958,8 +968,17 @@ _DAY_NAMES = ['mon','tue','wed','thu','fri','sat','sun']  # weekday() 0=Mon…6=
 def _today_day_abbr():
     return _DAY_NAMES[sydney_now().weekday()]
 
+_templates_cache = None
+_templates_mtime  = 0
+
 def get_templates():
-    """Return all site templates: hardcoded base sites + any user-added sites from sites_config.json."""
+    """Return all site templates, cached by file mtime so disk is only read when the file changes."""
+    global _templates_cache, _templates_mtime
+    try:   mtime = os.path.getmtime(SITES_CONFIG_FILE)
+    except: mtime = 0
+    if _templates_cache is not None and mtime == _templates_mtime:
+        return _templates_cache
+
     try:
         with open(SITES_CONFIG_FILE) as f:
             scfg = json.load(f)
@@ -985,6 +1004,8 @@ def get_templates():
                 'weekly_items':   src['weekly_items'],
             }
 
+    _templates_cache = result
+    _templates_mtime  = mtime
     return result
 
 # ── Employee auth ─────────────────────────────────────────────────────────────
@@ -1311,7 +1332,7 @@ def api_create_site():
         with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
     except: scfg = {}
     scfg[sid] = {'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type}
-    with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
+    save_json(SITES_CONFIG_FILE, scfg)
     return jsonify({'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type, 'is_builtin': False}), 201
 
 @app.route('/api/sites/<site_id>/logo', methods=['POST'])
@@ -1330,7 +1351,7 @@ def api_upload_site_logo(site_id):
     except: scfg = {}
     if site_id not in scfg: scfg[site_id] = {}
     scfg[site_id]['logo'] = fn
-    with open(SITES_CONFIG_FILE, 'w') as fp: json.dump(scfg, fp, indent=2)
+    save_json(SITES_CONFIG_FILE, scfg)
     return jsonify({'ok': True, 'logo_url': f'/site-logos/{fn}'})
 
 @app.route('/site-logos/<filename>')
@@ -1353,7 +1374,7 @@ def api_update_site(site_id):
         except: scfg = {}
         if site_id not in scfg: scfg[site_id] = {}
         scfg[site_id].update(site_meta)
-        with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
+        save_json(SITES_CONFIG_FILE, scfg)
     # Save schedule config (assigned_days, assigned_employees, enabled)
     if data:
         cfg = load_all_site_configs()
@@ -1371,13 +1392,14 @@ def api_delete_site(site_id):
         with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
     except: scfg = {}
     scfg.pop(site_id, None)
-    with open(SITES_CONFIG_FILE, 'w') as f: json.dump(scfg, f, indent=2)
+    save_json(SITES_CONFIG_FILE, scfg)
     all_cfg = load_all_site_configs()
     all_cfg.pop(site_id, None)
     save_all_site_configs(all_cfg)
     return jsonify({'ok': True})
 
 @app.route('/api/sites/today')
+@employee_or_admin_required
 def api_sites_today():
     day     = _today_day_abbr()
     emp_id  = session.get('employee_id')
@@ -1405,6 +1427,7 @@ def api_sites_today():
     return jsonify(result)
 
 @app.route('/api/sites/week')
+@employee_or_admin_required
 def api_sites_week():
     emp_id  = session.get('employee_id')
     all_cfg = load_all_site_configs()          # sites.json  — schedule/enabled data
@@ -2105,9 +2128,22 @@ def client_login():
         clients  = load_json(CLIENTS_FILE)
         client   = next((c for c in clients
                          if c.get('username','').lower() == username
-                         and c.get('password','') == password
                          and c.get('active', True)), None)
+        # Verify password — support hashed (pbkdf2:*) and legacy plaintext with auto-upgrade
         if client:
+            stored = client.get('password', '')
+            is_hashed = stored.startswith('pbkdf2:') or stored.startswith('scrypt:')
+            if is_hashed:
+                ok = check_password_hash(stored, password)
+            else:
+                ok = (stored == password)
+                if ok:
+                    # Auto-upgrade plaintext → hashed on first successful login
+                    client['password'] = generate_password_hash(password)
+                    save_json(CLIENTS_FILE, clients)
+        else:
+            ok = False
+        if ok:
             session.permanent = True
             session['client_id']    = client['id']
             session['client_name']  = client['name']
@@ -2246,15 +2282,18 @@ def api_create_client():
     ensure_dirs()
     data   = request.get_json()
     clients = load_json(CLIENTS_FILE)
+    raw_pw = data.get('password','').strip()
     client = {
-        'id':         str(uuid.uuid4()),
-        'name':       data.get('name','').strip(),
-        'username':   data.get('username','').strip().lower(),
-        'password':   data.get('password','').strip(),
-        'mobile':     data.get('mobile','').strip(),
-        'sites':      data.get('sites', []),
-        'active':     True,
-        'created_at': sydney_now().isoformat(),
+        'id':            str(uuid.uuid4()),
+        'name':          data.get('name','').strip(),
+        'business_name': data.get('business_name','').strip(),
+        'username':      data.get('username','').strip().lower(),
+        'password':      generate_password_hash(raw_pw),
+        'email':         data.get('email','').strip(),
+        'mobile':        data.get('mobile','').strip(),
+        'sites':         data.get('sites', []),
+        'active':        True,
+        'created_at':    sydney_now().isoformat(),
     }
     clients.append(client)
     save_json(CLIENTS_FILE, clients)
@@ -2276,6 +2315,52 @@ def api_delete_client(cid):
     clients = [c for c in load_json(CLIENTS_FILE) if c['id'] != cid]
     save_json(CLIENTS_FILE, clients)
     return jsonify({'ok': True})
+
+@app.route('/api/clients/for-invoice')
+@login_required
+def api_clients_for_invoice():
+    """Return clients with their sites and weekly charge amounts for invoice auto-fill."""
+    clients   = load_json(CLIENTS_FILE)
+    templates = get_templates()
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+
+    result = []
+    for c in clients:
+        if not c.get('active', True): continue
+        site_ids = c.get('sites') or list(templates.keys())
+        client_sites = []
+        for sid in site_ids:
+            t  = templates.get(sid, {})
+            sc = scfg.get(sid, {})
+            pricing = sc.get('pricing', {})
+            stype   = sc.get('site_type', 'restaurant')
+            has_k   = sc.get('has_kitchen', t.get('has_kitchen', False))
+            if stype == 'restaurant':
+                w_rev = float(pricing.get('dining_weekly') or 0)
+                if has_k: w_rev += float(pricing.get('kitchen_weekly') or 0)
+            elif stype == 'office':
+                w_rev = float(pricing.get('office_weekly') or 0)
+            elif stype == 'construction':
+                w_rev = float(pricing.get('construction_weekly') or 0)
+            else:
+                w_rev = 0.0
+            name = sc.get('name', t.get('name', sid))
+            client_sites.append({
+                'id':             sid,
+                'name':           name,
+                'weekly_revenue': round(w_rev, 2),
+            })
+        result.append({
+            'id':            c['id'],
+            'name':          c.get('name', ''),
+            'business_name': c.get('business_name', ''),
+            'email':         c.get('email', ''),
+            'mobile':        c.get('mobile', ''),
+            'sites':         client_sites,
+        })
+    return jsonify(result)
 
 @app.route('/api/clients/<cid>/logo', methods=['POST'])
 @login_required

@@ -158,6 +158,7 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 </style>
 </head>
 <body>
+{% include '_loader.html' %}
 <div class="topbar">
   <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
   <div class="topbar-name">Ridgeline Services</div>
@@ -280,78 +281,77 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 </div>
 
 <script>
-fetch('/api/stats').then(r=>r.json()).then(s => {
-  document.getElementById('sQuotes').textContent  = s.total_quotes ?? '0';
-  document.getElementById('sPending').textContent = s.pending_quotes ?? '0';
-  document.getElementById('sRevenue').textContent = '$' + ((s.month_revenue||0)/1).toLocaleString('en-AU',{maximumFractionDigits:0});
-});
-
 function fmtMins(m) {
   if (m == null) return '—';
   if (m < 60) return m + 'm';
   const h = Math.floor(m / 60), rem = Math.round(m % 60);
   return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
 }
-
-const DAY_SHORT = {Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
-
-fetch('/api/cleaning-kpis').then(r=>{if(!r.ok)throw new Error('KPI '+r.status);return r.json();}).then(d => {
-  document.getElementById('kTotal').textContent = d.total_sites_cleaned ?? 0;
-
-  const kEl = document.getElementById('kKitchen');
-  kEl.textContent = fmtMins(d.avg_mins_kitchen);
-  if (d.avg_mins_kitchen != null) document.getElementById('kKitchenU').style.display='';
-
-  const nkEl = document.getElementById('kNoKitchen');
-  nkEl.textContent = fmtMins(d.avg_mins_no_kitchen);
-  if (d.avg_mins_no_kitchen != null) document.getElementById('kNoKitchenU').style.display='';
-
-  const grid = document.getElementById('empKpiGrid');
-  if (!d.employees || !d.employees.length) {
-    grid.innerHTML = '<div style="color:#444;font-size:13px;padding:8px;grid-column:1/-1;">No data yet — times appear after employees submit checklists with GPS.</div>';
-    return;
-  }
-  grid.innerHTML = d.employees.map(emp => {
-    const allDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    const topSet  = new Set(emp.top_days || []);
-    const dayPills = allDays
-      .filter(dy => (emp.day_breakdown||{})[dy] > 0)
-      .map(dy => {
-        const isTop = topSet.has(dy);
-        return `<span class="day-pill${isTop?' top':''}">${DAY_SHORT[dy]}</span>`;
-      }).join('');
-    return `
-    <div class="emp-kpi-card">
-      <div class="emp-kpi-name">👷 ${emp.name}</div>
-      <div class="emp-kpi-time">${fmtMins(emp.avg_mins)}</div>
-      <div class="emp-kpi-time-lbl">avg completion time</div>
-      <div class="emp-kpi-total">${emp.total} checklist${emp.total!==1?'s':''} submitted</div>
-      <div class="day-pills">${dayPills || '<span style="color:#444;font-size:11px;">No day data</span>'}</div>
-    </div>`;
-  }).join('');
-}).catch(err => {
-  console.error('KPI fetch failed:', err);
-  document.getElementById('empKpiGrid').innerHTML = '<div style="color:#ef5350;font-size:12px;padding:8px;grid-column:1/-1;">Could not load KPIs — check console</div>';
-  ['kTotal','kKitchen','kNoKitchen'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='ERR'; });
-});
-
-// ── Revenue summary ───────────────────────────────────────────────────────────
 function fmtAUD(n) {
   if (n == null || isNaN(n)) return '—';
   return '$' + Number(n).toLocaleString('en-AU', {maximumFractionDigits:0});
 }
-fetch('/api/revenue-summary').then(r=>{if(!r.ok)throw new Error('Rev '+r.status);return r.json();}).then(d => {
-  document.getElementById('revEarned').textContent = fmtAUD(d.week_actual_revenue);
-  document.getElementById('revLabor').textContent  = fmtAUD(d.week_actual_labor);
-  const profit = d.week_actual_profit;
+const DAY_SHORT = {Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
+
+// ── Parallel load: stats + KPIs + revenue in one round-trip wait ─────────────
+Promise.all([
+  fetch('/api/stats').then(r => { if(!r.ok) throw new Error('stats '+r.status); return r.json(); }),
+  fetch('/api/cleaning-kpis').then(r => { if(!r.ok) throw new Error('kpis '+r.status); return r.json(); }),
+  fetch('/api/revenue-summary').then(r => { if(!r.ok) throw new Error('rev '+r.status); return r.json(); }),
+]).then(([s, d, rev]) => {
+  // Stats tile
+  document.getElementById('sQuotes').textContent  = s.total_quotes ?? '0';
+  document.getElementById('sPending').textContent = s.pending_quotes ?? '0';
+  document.getElementById('sRevenue').textContent = '$' + ((s.month_revenue||0)/1).toLocaleString('en-AU',{maximumFractionDigits:0});
+
+  // Cleaning KPIs
+  document.getElementById('kTotal').textContent = d.total_sites_cleaned ?? 0;
+  const kEl = document.getElementById('kKitchen');
+  kEl.textContent = fmtMins(d.avg_mins_kitchen);
+  if (d.avg_mins_kitchen != null) document.getElementById('kKitchenU').style.display='';
+  const nkEl = document.getElementById('kNoKitchen');
+  nkEl.textContent = fmtMins(d.avg_mins_no_kitchen);
+  if (d.avg_mins_no_kitchen != null) document.getElementById('kNoKitchenU').style.display='';
+  const grid = document.getElementById('empKpiGrid');
+  if (!d.employees || !d.employees.length) {
+    grid.innerHTML = '<div style="color:#444;font-size:13px;padding:8px;grid-column:1/-1;">No data yet — times appear after employees submit checklists with GPS.</div>';
+  } else {
+    grid.innerHTML = d.employees.map(emp => {
+      const allDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const topSet  = new Set(emp.top_days || []);
+      const dayPills = allDays
+        .filter(dy => (emp.day_breakdown||{})[dy] > 0)
+        .map(dy => {
+          const isTop = topSet.has(dy);
+          return `<span class="day-pill${isTop?' top':''}">${DAY_SHORT[dy]}</span>`;
+        }).join('');
+      return `
+      <div class="emp-kpi-card">
+        <div class="emp-kpi-name">👷 ${emp.name}</div>
+        <div class="emp-kpi-time">${fmtMins(emp.avg_mins)}</div>
+        <div class="emp-kpi-time-lbl">avg completion time</div>
+        <div class="emp-kpi-total">${emp.total} checklist${emp.total!==1?'s':''} submitted</div>
+        <div class="day-pills">${dayPills || '<span style="color:#444;font-size:11px;">No day data</span>'}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Revenue summary
+  document.getElementById('revEarned').textContent = fmtAUD(rev.week_actual_revenue);
+  document.getElementById('revLabor').textContent  = fmtAUD(rev.week_actual_labor);
+  const profit = rev.week_actual_profit;
   const profitEl = document.getElementById('revProfit');
   profitEl.textContent  = fmtAUD(profit);
   profitEl.style.color  = (profit >= 0) ? '#4caf50' : '#ef5350';
-  document.getElementById('revContracted').textContent       = fmtAUD(d.month_contracted);
-  document.getElementById('revProfitContracted').textContent = fmtAUD(d.weekly_profit_contracted * 52 / 12);
+  document.getElementById('revContracted').textContent       = fmtAUD(rev.month_contracted);
+  document.getElementById('revProfitContracted').textContent = fmtAUD(rev.weekly_profit_contracted * 52 / 12);
 }).catch(err => {
-  console.error('Revenue fetch failed:', err);
-  ['revEarned','revLabor','revProfit','revContracted','revProfitContracted'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='ERR'; });
+  console.error('Home dashboard fetch failed:', err);
+  ['kTotal','kKitchen','kNoKitchen','revEarned','revLabor','revProfit','revContracted','revProfitContracted'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.textContent='ERR';
+  });
+  const grid = document.getElementById('empKpiGrid');
+  if (grid) grid.innerHTML = '<div style="color:#ef5350;font-size:12px;padding:8px;grid-column:1/-1;">Could not load data — check console</div>';
 });
 
 // ── Live cleaner map ─────────────────────────────────────────────────────────

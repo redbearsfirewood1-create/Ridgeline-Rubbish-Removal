@@ -144,6 +144,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 </style>
 </head>
 <body>
+{% include '_loader.html' %}
 
 <div class="topbar">
   <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
@@ -164,23 +165,40 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
     <div class="add-title">➕ Add Client Account</div>
     <div class="form-row">
       <div>
-        <div class="field-label">Client / Company Name</div>
-        <input class="field" id="newName" placeholder="e.g. McDonald's AU" type="text">
+        <div class="field-label">Client / Contact Name</div>
+        <input class="field" id="newName" placeholder="e.g. John Smith" type="text">
       </div>
       <div>
-        <div class="field-label">Username</div>
-        <input class="field" id="newUser" placeholder="e.g. mcdonalds" type="text" autocapitalize="none">
+        <div class="field-label">Business Name</div>
+        <input class="field" id="newBizName" placeholder="e.g. McDonald's AU" type="text">
       </div>
     </div>
     <div class="form-row">
       <div>
+        <div class="field-label">Email Address</div>
+        <input class="field" id="newEmail" placeholder="client@email.com" type="email">
+      </div>
+      <div>
+        <div class="field-label">Mobile Number</div>
+        <input class="field" id="newMobile" placeholder="04xx xxx xxx" type="text">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <div class="field-label">Username (portal login)</div>
+        <input class="field" id="newUser" placeholder="e.g. mcdonalds" type="text" autocapitalize="none">
+      </div>
+      <div>
         <div class="field-label">Password</div>
         <input class="field" id="newPass" placeholder="Set a password" type="text">
       </div>
+    </div>
+    <div class="form-row">
       <div>
         <div class="field-label">Client Logo (optional)</div>
         <input class="field" id="newLogo" type="file" accept="image/*" style="padding:8px 10px;cursor:pointer;">
       </div>
+      <div></div>
     </div>
     <div class="sites-label">Site Access (empty = all sites)</div>
     <div class="sites-checks" id="newSitesChecks"></div>
@@ -199,9 +217,27 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
       <div class="modal-title">Edit Client</div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
-    <div class="field-label">Company Name</div>
-    <input class="field" id="editName" style="margin-bottom:12px;">
-    <div class="field-label">Username</div>
+    <div class="form-row">
+      <div>
+        <div class="field-label">Contact Name</div>
+        <input class="field" id="editName" style="margin-bottom:12px;">
+      </div>
+      <div>
+        <div class="field-label">Business Name</div>
+        <input class="field" id="editBizName" style="margin-bottom:12px;" placeholder="e.g. McDonald's AU">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <div class="field-label">Email Address</div>
+        <input class="field" id="editEmail" style="margin-bottom:12px;" type="email" placeholder="client@email.com">
+      </div>
+      <div>
+        <div class="field-label">Mobile Number</div>
+        <input class="field" id="editMobile" style="margin-bottom:12px;" type="text" placeholder="04xx xxx xxx">
+      </div>
+    </div>
+    <div class="field-label">Username (portal login)</div>
     <input class="field" id="editUser" style="margin-bottom:12px;" autocapitalize="none">
     <div class="field-label">Password (leave blank to keep existing)</div>
     <input class="field" id="editPass" style="margin-bottom:16px;" type="text" placeholder="Leave blank to keep current">
@@ -273,8 +309,9 @@ function renderClients() {
     return `<div class="client-card">
       ${logoHtml}
       <div class="client-info">
-        <div class="client-name">${c.name}${inactiveBadge}</div>
-        <div class="client-user">@${c.username}</div>
+        <div class="client-name">${c.business_name || c.name}${inactiveBadge}</div>
+        <div class="client-user">${c.name ? c.name + ' · ' : ''}@${c.username}</div>
+        ${c.email ? `<div class="client-user" style="color:#666">✉ ${c.email}${c.mobile ? ' · 📞 ' + c.mobile : ''}</div>` : (c.mobile ? `<div class="client-user" style="color:#666">📞 ${c.mobile}</div>` : '')}
         <div class="client-sites-tag">${siteLabel}</div>
       </div>
       <div class="client-actions">
@@ -286,15 +323,18 @@ function renderClients() {
 }
 
 async function addClient() {
-  const name = document.getElementById('newName').value.trim();
-  const user = document.getElementById('newUser').value.trim().toLowerCase();
-  const pass = document.getElementById('newPass').value.trim();
-  if (!name || !user || !pass) { alert('Please fill in name, username and password.'); return; }
+  const name    = document.getElementById('newName').value.trim();
+  const bizName = document.getElementById('newBizName').value.trim();
+  const email   = document.getElementById('newEmail').value.trim();
+  const mobile  = document.getElementById('newMobile').value.trim();
+  const user    = document.getElementById('newUser').value.trim().toLowerCase();
+  const pass    = document.getElementById('newPass').value.trim();
+  if (!name || !user || !pass) { alert('Please fill in contact name, username and password.'); return; }
   const sites = getCheckedSites('newSitesChecks');
   const r = await fetch('/api/clients', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({name, username: user, password: pass, sites})
+    body: JSON.stringify({name, business_name: bizName, email, mobile, username: user, password: pass, sites})
   });
   if (!r.ok) { alert('Error creating client.'); return; }
   const newClient = await r.json();
@@ -306,6 +346,9 @@ async function addClient() {
     await fetch(`/api/clients/${newClient.id}/logo`, {method:'POST', body: fd});
   }
   document.getElementById('newName').value = '';
+  document.getElementById('newBizName').value = '';
+  document.getElementById('newEmail').value = '';
+  document.getElementById('newMobile').value = '';
   document.getElementById('newUser').value = '';
   document.getElementById('newPass').value = '';
   document.getElementById('newLogo').value = '';
@@ -317,9 +360,12 @@ function openEdit(id) {
   const c = allClients.find(x => x.id === id);
   if (!c) return;
   editingId = id;
-  document.getElementById('editName').value   = c.name;
-  document.getElementById('editUser').value   = c.username;
-  document.getElementById('editPass').value   = '';
+  document.getElementById('editName').value    = c.name;
+  document.getElementById('editBizName').value = c.business_name || '';
+  document.getElementById('editEmail').value   = c.email || '';
+  document.getElementById('editMobile').value  = c.mobile || '';
+  document.getElementById('editUser').value    = c.username;
+  document.getElementById('editPass').value    = '';
   document.getElementById('editActive').checked = c.active !== false;
   document.getElementById('editLogo').value   = '';
   const prev = document.getElementById('editLogoPreview');
@@ -333,10 +379,13 @@ async function saveEdit() {
   if (!editingId) return;
   const c = allClients.find(x => x.id === editingId);
   const payload = {
-    name:     document.getElementById('editName').value.trim(),
-    username: document.getElementById('editUser').value.trim().toLowerCase(),
-    sites:    getCheckedSites('editSitesChecks'),
-    active:   document.getElementById('editActive').checked,
+    name:          document.getElementById('editName').value.trim(),
+    business_name: document.getElementById('editBizName').value.trim(),
+    email:         document.getElementById('editEmail').value.trim(),
+    mobile:        document.getElementById('editMobile').value.trim(),
+    username:      document.getElementById('editUser').value.trim().toLowerCase(),
+    sites:         getCheckedSites('editSitesChecks'),
+    active:        document.getElementById('editActive').checked,
   };
   const pass = document.getElementById('editPass').value.trim();
   if (pass) payload.password = pass;

@@ -20,6 +20,13 @@ body{background:#1a1a1a;font-family:system-ui,-apple-system,sans-serif;min-heigh
 .saved-flash{color:#4caf50;font-size:12px;opacity:0;transition:opacity .4s}
 .saved-flash.show{opacity:1}
 
+/* ── Client selector bar ───────────────────────────── */
+.client-bar{background:#111;border-bottom:1px solid #1e3a1e;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.client-bar label{font-size:12px;color:#888;font-weight:700;white-space:nowrap}
+.client-bar select{background:#1a2e1a;border:1px solid #2a4a2a;color:#f0f0f0;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;flex:1;min-width:200px;max-width:360px;cursor:pointer}
+.client-bar select:focus{outline:1px solid #3d8b3d}
+.client-bar-hint{font-size:11px;color:#555;font-style:italic}
+
 /* ── Page canvas ───────────────────────────────────── */
 .canvas{padding:28px 20px 60px;display:flex;justify-content:center}
 
@@ -129,6 +136,7 @@ textarea.notes-area:focus{border-color:#3d8b3d;background:#f7fff7}
 </style>
 </head>
 <body>
+{% include '_loader.html' %}
 
 <!-- ── Top bar ── -->
 <div class="topbar no-print">
@@ -146,6 +154,16 @@ textarea.notes-area:focus{border-color:#3d8b3d;background:#f7fff7}
   <button class="btn btn-email" onclick="openEmail()">✉ Email</button>
 </div>
 
+<!-- ── Client quick-fill bar ── -->
+<div class="client-bar no-print">
+  <label>🏢 Fill from client:</label>
+  <select id="clientQuickSel" onchange="fillFromClient()">
+    <option value="">— Select a client to auto-fill —</option>
+  </select>
+  <button class="btn btn-status" onclick="clearInvoice()" title="Start a blank one-off invoice">✕ Clear / One-off</button>
+  <span class="client-bar-hint" id="clientBarHint">Select a client to auto-fill, or leave blank for a one-off invoice</span>
+</div>
+
 <!-- ── Invoice paper ── -->
 <div class="canvas">
 <div class="paper" id="invoicePaper">
@@ -153,6 +171,7 @@ textarea.notes-area:focus{border-color:#3d8b3d;background:#f7fff7}
   <!-- Header -->
   <div class="inv-header">
     <div>
+      <img src="/static/logo.png" alt="Ridgeline" style="height:60px;object-fit:contain;margin-bottom:8px;display:block;" onerror="this.style.display='none'">
       <div class="brand-name">RIDGELINE RUBBISH REMOVAL</div>
       <div class="brand-tagline">Rubbish Removal &nbsp;·&nbsp; Furniture Specialists &nbsp;·&nbsp; Commercial Cleaning</div>
       <div class="brand-contact" style="margin-top:14px;font-size:12px;color:#555;line-height:2">
@@ -304,8 +323,13 @@ function getLines() {
   });
 }
 
-// ── Totals ────────────────────────────────────────────────
+// ── Totals (debounced — runs at most once per 150ms) ──────
+let _recalcTimer;
 function recalc() {
+  clearTimeout(_recalcTimer);
+  _recalcTimer = setTimeout(_doRecalc, 150);
+}
+function _doRecalc() {
   const lines = getLines();
   const sub   = lines.reduce((s,l) => s + l.total, 0);
   const disc  = parseFloat(document.getElementById('f_discount')?.value) || 0;
@@ -342,6 +366,76 @@ function collectData() {
 }
 
 function v(id) { return document.getElementById(id)?.value || ''; }
+
+// ── Client quick-fill ─────────────────────────────────────
+let _clients = [];
+
+async function loadClients() {
+  try {
+    const r = await fetch('/api/clients/for-invoice');
+    _clients = await r.json();
+    const sel = document.getElementById('clientQuickSel');
+    _clients.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = (c.business_name || c.name) + (c.sites.length ? ` (${c.sites.length} site${c.sites.length!==1?'s':''})` : '');
+      sel.appendChild(opt);
+    });
+  } catch(e) { console.warn('Could not load clients for invoice:', e); }
+}
+
+function clearInvoice() {
+  // Reset client dropdown
+  document.getElementById('clientQuickSel').value = '';
+  const hint = document.getElementById('clientBarHint');
+  if (hint) hint.textContent = 'Select a client to auto-fill, or leave blank for a one-off invoice';
+  // Clear Bill To fields
+  ['f_company','f_contact','f_email','f_phone','f_address'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  // Clear line items and add one blank row
+  document.getElementById('lineItems').innerHTML = '';
+  lineCount = 0;
+  addLine('', '1', '');
+  recalc();
+}
+
+function fillFromClient() {
+  const id = document.getElementById('clientQuickSel').value;
+  if (!id) return;
+  const c = _clients.find(x => x.id === id);
+  if (!c) return;
+
+  // Populate Bill To
+  const set = (fid, val) => { const el = document.getElementById(fid); if(el && val) el.value = val; };
+  set('f_company', c.business_name || c.name);
+  set('f_contact', c.name);
+  set('f_email',   c.email);
+  set('f_phone',   c.mobile);
+
+  // Clear existing line items and add one per site
+  document.getElementById('lineItems').innerHTML = '';
+  lineCount = 0;
+  if (c.sites && c.sites.length) {
+    const hasPricing = c.sites.some(s => s.weekly_revenue > 0);
+    c.sites.forEach(s => {
+      addLine(
+        `Weekly cleaning — ${s.name}`,
+        '1',
+        s.weekly_revenue > 0 ? s.weekly_revenue : ''
+      );
+    });
+    const hint = document.getElementById('clientBarHint');
+    if (hint) hint.textContent = hasPricing
+      ? `${c.sites.length} site${c.sites.length!==1?'s':''} loaded · $${c.sites.reduce((t,s)=>t+s.weekly_revenue,0).toFixed(2)} total`
+      : `${c.sites.length} site${c.sites.length!==1?'s':''} loaded — set pricing in Employees → Sites to auto-fill amounts`;
+  } else {
+    addLine('Weekly cleaning services', '1', '');
+    const hint = document.getElementById('clientBarHint');
+    if (hint) hint.textContent = 'No sites assigned — add sites to this client in Client Accounts';
+  }
+  recalc();
+}
 
 // ── Save ──────────────────────────────────────────────────
 async function saveDraft() {
@@ -531,6 +625,7 @@ if (Object.keys(SAVED_DATA).length) {
   addLine(); // start with one empty line
 }
 recalc();
+loadClients(); // async — populates client dropdown
 
 document.getElementById('topbarTitle').textContent =
   document.getElementById('f_inv_number')?.value || 'New Invoice';
