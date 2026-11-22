@@ -153,6 +153,7 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   <img src="/static/logo.png" alt="" onerror="this.style.display='none'">
   <div class="topbar-title">Expenses</div>
   <button class="btn-add" onclick="toggleForm()">+ Add</button>
+  <button class="btn-add" style="background:#1a2e3a;border:1px solid #1e3a52;" onclick="exportCSV()">📥 Export Tax CSV</button>
   <a href="/home" class="btn-back" style="margin-left:8px">← Home</a>
 </div>
 
@@ -189,6 +190,7 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   <div class="total-item"><div class="total-val" id="tMonth">$0</div><div class="total-lbl">This Month</div></div>
   <div class="total-item"><div class="total-val" id="tYear">$0</div><div class="total-lbl">This Year</div></div>
   <div class="total-item"><div class="total-val" id="tCount">0</div><div class="total-lbl">Entries</div></div>
+  <div class="total-item"><div class="total-val" id="tLabour" style="color:#ff9800">$0</div><div class="total-lbl">Labour (auto)</div></div>
 </div>
 
 <div class="list" id="expList">
@@ -210,7 +212,7 @@ function toggleForm() {
 }
 
 async function load() {
-  const res = await fetch('/api/expenses');
+  const res = await fetch('/api/expenses/combined');
   expenses = await res.json();
   render();
 }
@@ -220,11 +222,13 @@ function render() {
   const thisMonth = now.toISOString().slice(0,7);
   const thisYear  = String(now.getFullYear());
 
-  const mTotal = expenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+(e.amount||0),0);
-  const yTotal = expenses.filter(e=>e.date?.startsWith(thisYear)).reduce((s,e)=>s+(e.amount||0),0);
-  document.getElementById('tMonth').textContent = '$' + mTotal.toFixed(0);
-  document.getElementById('tYear').textContent  = '$' + yTotal.toFixed(0);
-  document.getElementById('tCount').textContent = expenses.length;
+  const mTotal  = expenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+(e.amount||0),0);
+  const yTotal  = expenses.filter(e=>e.date?.startsWith(thisYear)).reduce((s,e)=>s+(e.amount||0),0);
+  const labTotal= expenses.filter(e=>e.source==='labour'&&e.date?.startsWith(thisYear)).reduce((s,e)=>s+(e.amount||0),0);
+  document.getElementById('tMonth').textContent  = '$' + mTotal.toFixed(0);
+  document.getElementById('tYear').textContent   = '$' + yTotal.toFixed(0);
+  document.getElementById('tCount').textContent  = expenses.length;
+  document.getElementById('tLabour').textContent = '$' + labTotal.toFixed(0);
 
   if (!expenses.length) {
     document.getElementById('expList').innerHTML = '<div class="empty">No expenses recorded yet.</div>';
@@ -234,14 +238,16 @@ function render() {
   document.getElementById('expList').innerHTML = expenses.map(e => {
     const icon = CAT_ICONS[e.category] || '📦';
     const date = e.date ? new Date(e.date+'T00:00').toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'}) : '';
-    return `<div class="exp-card">
-      <div class="exp-icon">${icon}</div>
+    const isLabour = e.source === 'labour';
+    const badge = isLabour ? '<span style="font-size:10px;background:#1a2a1a;color:#ff9800;border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:700;">AUTO</span>' : '';
+    return `<div class="exp-card" style="${isLabour?'opacity:.85;border-color:#2a2a1a':''}">
+      <div class="exp-icon">${isLabour?'👷':icon}</div>
       <div class="exp-info">
-        <div class="exp-desc">${e.description||'—'}</div>
-        <div class="exp-meta">${e.category||'Other'} · ${date}</div>
+        <div class="exp-desc">${e.description||'—'}${badge}</div>
+        <div class="exp-meta">${e.category||'Other'}${e.employee?' · '+e.employee:''} · ${date}</div>
       </div>
-      <div class="exp-amount">$${(e.amount||0).toFixed(2)}</div>
-      <button class="btn-del" onclick="deleteExpense('${e.id}')">✕</button>
+      <div class="exp-amount" style="${isLabour?'color:#ff9800':''}">$${(e.amount||0).toFixed(2)}</div>
+      ${isLabour ? '<span style="width:28px"></span>' : `<button class="btn-del" onclick="deleteExpense('${e.id}')">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -284,6 +290,12 @@ function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+function exportCSV() {
+  const year = new Date().getFullYear();
+  const url = `/api/export/tax?year=${year}`;
+  window.location.href = url;
 }
 
 load();

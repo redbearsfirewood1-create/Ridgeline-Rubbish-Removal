@@ -295,7 +295,7 @@ function fmtMins(m) {
 
 const DAY_SHORT = {Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
 
-fetch('/api/cleaning-kpis').then(r=>r.json()).then(d => {
+fetch('/api/cleaning-kpis').then(r=>{if(!r.ok)throw new Error('KPI '+r.status);return r.json();}).then(d => {
   document.getElementById('kTotal').textContent = d.total_sites_cleaned ?? 0;
 
   const kEl = document.getElementById('kKitchen');
@@ -329,8 +329,10 @@ fetch('/api/cleaning-kpis').then(r=>r.json()).then(d => {
       <div class="day-pills">${dayPills || '<span style="color:#444;font-size:11px;">No day data</span>'}</div>
     </div>`;
   }).join('');
-}).catch(() => {
-  document.getElementById('empKpiGrid').innerHTML = '<div style="color:#444;font-size:12px;padding:8px;grid-column:1/-1;">Could not load KPIs</div>';
+}).catch(err => {
+  console.error('KPI fetch failed:', err);
+  document.getElementById('empKpiGrid').innerHTML = '<div style="color:#ef5350;font-size:12px;padding:8px;grid-column:1/-1;">Could not load KPIs — check console</div>';
+  ['kTotal','kKitchen','kNoKitchen'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='ERR'; });
 });
 
 // ── Revenue summary ───────────────────────────────────────────────────────────
@@ -338,7 +340,7 @@ function fmtAUD(n) {
   if (n == null || isNaN(n)) return '—';
   return '$' + Number(n).toLocaleString('en-AU', {maximumFractionDigits:0});
 }
-fetch('/api/revenue-summary').then(r=>r.json()).then(d => {
+fetch('/api/revenue-summary').then(r=>{if(!r.ok)throw new Error('Rev '+r.status);return r.json();}).then(d => {
   document.getElementById('revEarned').textContent = fmtAUD(d.week_actual_revenue);
   document.getElementById('revLabor').textContent  = fmtAUD(d.week_actual_labor);
   const profit = d.week_actual_profit;
@@ -347,7 +349,10 @@ fetch('/api/revenue-summary').then(r=>r.json()).then(d => {
   profitEl.style.color  = (profit >= 0) ? '#4caf50' : '#ef5350';
   document.getElementById('revContracted').textContent       = fmtAUD(d.month_contracted);
   document.getElementById('revProfitContracted').textContent = fmtAUD(d.weekly_profit_contracted * 52 / 12);
-}).catch(() => {});
+}).catch(err => {
+  console.error('Revenue fetch failed:', err);
+  ['revEarned','revLabor','revProfit','revContracted','revProfitContracted'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='ERR'; });
+});
 
 // ── Live cleaner map ─────────────────────────────────────────────────────────
 function fmtTimeAU(isoStr) {

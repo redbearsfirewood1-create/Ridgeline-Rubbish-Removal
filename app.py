@@ -125,6 +125,8 @@ def client_required(f):
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/', methods=['GET','POST'])
 def login():
+    if session.get('logged_in'):
+        return redirect(url_for('home'))
     error = None
     if request.method == 'POST':
         if request.form.get('username','').strip().lower() == USERNAME.lower() \
@@ -786,23 +788,29 @@ def api_revenue_summary():
 
     # Add PAID invoices to actual revenue
     def _inv_total(inv):
-        items = inv.get('line_items', [])
-        sub   = sum(float(i.get('total', 0)) for i in items)
-        disc  = float(inv.get('discount', 0))
-        gstr  = float(inv.get('gst_rate', 0))
-        after = sub - disc
-        return after + (after * gstr / 100)
-
-    for inv in _load_invoices().values():
-        if inv.get('status') != 'paid': continue
-        d_str = inv.get('date', '')
-        if not d_str: continue
         try:
-            inv_dt = datetime.fromisoformat(d_str + 'T00:00:00').replace(tzinfo=SYDNEY_TZ)
-        except: continue
-        total = _inv_total(inv)
-        if inv_dt >= week_start:  wa += total
-        if inv_dt >= month_start: ma += total
+            items = inv.get('line_items', [])
+            sub   = sum(float(i.get('total', 0)) for i in items)
+            disc  = float(inv.get('discount', 0))
+            gstr  = float(inv.get('gst_rate', 0))
+            after = sub - disc
+            return after + (after * gstr / 100)
+        except:
+            return 0.0
+
+    try:
+        for inv in _load_invoices().values():
+            if inv.get('status') != 'paid': continue
+            d_str = inv.get('date', '')
+            if not d_str: continue
+            try:
+                inv_dt = datetime.fromisoformat(d_str + 'T00:00:00').replace(tzinfo=SYDNEY_TZ)
+            except: continue
+            total = _inv_total(inv)
+            if inv_dt >= week_start:  wa += total
+            if inv_dt >= month_start: ma += total
+    except Exception:
+        pass  # invoices.json missing or malformed — skip gracefully
 
     return jsonify({
         'weekly_contracted':        round(weekly_contracted, 2),
