@@ -141,7 +141,7 @@ textarea.notes-area:focus{border-color:#3d8b3d;background:#f7fff7}
     <option value="paid">Paid ✓</option>
     <option value="overdue">Overdue</option>
   </select>
-  <button class="btn btn-save" onclick="saveDraft()">💾 Save</button>
+  <button class="btn btn-save" onclick="saveAndReturn()">💾 Save</button>
   <button class="btn btn-print" onclick="printInvoice()">🖨 Print / PDF</button>
   <button class="btn btn-email" onclick="openEmail()">✉ Email</button>
 </div>
@@ -354,6 +354,18 @@ async function saveDraft() {
     history.replaceState(null,'',`/invoices/${savedId}/edit`);
   }
   flash('Saved ✓');
+}
+
+async function saveAndReturn() {
+  const data = collectData();
+  if (savedId) data.id = savedId;
+  const res  = await fetch('/api/invoices', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const json = await res.json();
+  if (json.id) {
+    window.location.href = '/invoices';
+  } else {
+    flash('Save failed ✗');
+  }
 }
 
 function flash(msg) {
