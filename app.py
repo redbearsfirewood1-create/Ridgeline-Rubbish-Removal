@@ -784,6 +784,26 @@ def api_revenue_summary():
         if sub_dt >= month_start:
             ma += srv['per_visit_revenue']; ml += srv['per_visit_labor']
 
+    # Add PAID invoices to actual revenue
+    def _inv_total(inv):
+        items = inv.get('line_items', [])
+        sub   = sum(float(i.get('total', 0)) for i in items)
+        disc  = float(inv.get('discount', 0))
+        gstr  = float(inv.get('gst_rate', 0))
+        after = sub - disc
+        return after + (after * gstr / 100)
+
+    for inv in _load_invoices().values():
+        if inv.get('status') != 'paid': continue
+        d_str = inv.get('date', '')
+        if not d_str: continue
+        try:
+            inv_dt = datetime.fromisoformat(d_str + 'T00:00:00').replace(tzinfo=SYDNEY_TZ)
+        except: continue
+        total = _inv_total(inv)
+        if inv_dt >= week_start:  wa += total
+        if inv_dt >= month_start: ma += total
+
     return jsonify({
         'weekly_contracted':        round(weekly_contracted, 2),
         'weekly_labor_contracted':  round(weekly_labor_contracted, 2),
@@ -2381,6 +2401,205 @@ def api_sites_with_clients():
                 'logo_url':    logo_url,
             }
     return jsonify(result)
+
+# ── Combined expenses (manual + checklist labour) ─────────────────────────────
+@app.route('/api/expenses/combined', methods=['GET'])
+@login_required
+def api_expenses_combined():
+    """Returns manual expenses PLUS labour costs derived from completed checklists."""
+    from datetime import timedelta
+    manual = load_json(EXPENSES_FILE)
+    for e in manual:
+        e.setdefault('source', 'manual')
+
+    # Build labour entries from checklists
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+    templates  = get_templates()
+    checklists = load_json(CHECKLISTS_FILE)
+
+    # Build per-site labour rate lookup
+    labour_map = {}
+    for sid, t in templates.items():
+        sc      = scfg.get(sid, {})
+        pricing = sc.get('pricing', {})
+        stype   = sc.get('site_type', 'restaurant')
+        has_k   = sc.get('has_kitchen', t.get('has_kitchen', False))
+        if stype == 'restaurant':
+            rate = float(pricing.get('dining_cleaner_rate') or 0)
+            if has_k: rate += float(pricing.get('kitchen_cleaner_rate') or 0)
+        elif stype == 'office':
+            rate = float(pricing.get('office_cleaner_rate') or 0)
+        elif stype == 'construction':
+            rate = float(pricing.get('construction_cleaner_rate') or 0)
+        else:
+            rate = 0.0
+        labour_map[sid] = {'name': sc.get('name', t.get('name', sid)), 'rate': rate}
+
+    labour_entries = []
+    for cl in checklists:
+        raw = cl.get('submitted_at') or cl.get('date') or ''
+        if not raw: continue
+        site_id = cl.get('site_id', '')
+        lm = labour_map.get(site_id)
+        if not lm or lm['rate'] == 0: continue
+        date_str = ''
+        try:
+            dt = datetime.fromisoformat(raw.replace('Z',''))
+            date_str = dt.strftime('%Y-%m-%d')
+        except:
+            date_str = raw[:10]
+        labour_entries.append({
+            'id':          cl.get('id', ''),
+            'source':      'labour',
+            'date':        date_str,
+            'amount':      lm['rate'],
+            'category':    'Labour',
+            'description': f"Cleaning labour — {lm['name']}",
+            'employee':    cl.get('employee_name', ''),
+        })
+
+    all_expenses = sorted(manual + labour_entries,
+                          key=lambda x: x.get('date',''), reverse=True)
+    return jsonify(all_expenses)
+
+
+# ── Tax / Financial export (CSV) ───────────────────────────────────────────────
+@app.route('/api/export/tax')
+@login_required
+def api_export_tax():
+    import csv, io as _io
+    from datetime import timedelta
+
+    year  = request.args.get('year',  sydney_now().strftime('%Y'))
+    month = request.args.get('month', '')   # optional — filter to month
+
+    def in_period(date_str):
+        if not date_str: return False
+        if month: return date_str.startswith(f'{year}-{month.zfill(2)}')
+        return date_str.startswith(year)
+
+    rows = []
+
+    # ── INCOME: Paid invoices ──
+    for inv in _load_invoices().values():
+        if inv.get('status') != 'paid': continue
+        d = inv.get('date','')
+        if not in_period(d): continue
+        items = inv.get('line_items', [])
+        sub   = sum(float(i.get('total',0)) for i in items)
+        disc  = float(inv.get('discount',0))
+        gstr  = float(inv.get('gst_rate',0))
+        after = sub - disc
+        total = after + (after * gstr / 100)
+        rows.append({
+            'Type': 'Income',
+            'Date': d,
+            'Reference': inv.get('invoice_number',''),
+            'Description': f"Invoice — {inv.get('bill_to',{}).get('company','') or inv.get('bill_to',{}).get('contact','')}",
+            'Category': 'Sales Revenue',
+            'Amount (AUD)': round(total, 2),
+            'GST': round(after * gstr / 100, 2),
+        })
+
+    # ── INCOME: Checklist-based revenue ──
+    try:
+        with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
+    except: scfg = {}
+    templates  = get_templates()
+    checklists = load_json(CHECKLISTS_FILE)
+
+    rev_map = {}
+    for sid, t in templates.items():
+        sc      = scfg.get(sid, {})
+        pricing = sc.get('pricing', {})
+        stype   = sc.get('site_type', 'restaurant')
+        has_k   = sc.get('has_kitchen', t.get('has_kitchen', False))
+        days    = max(1, int(pricing.get('days_per_week') or 5))
+        if stype == 'restaurant':
+            w_rev = float(pricing.get('dining_weekly') or 0)
+            if has_k: w_rev += float(pricing.get('kitchen_weekly') or 0)
+            rate  = float(pricing.get('dining_cleaner_rate') or 0)
+            if has_k: rate += float(pricing.get('kitchen_cleaner_rate') or 0)
+        elif stype == 'office':
+            w_rev = float(pricing.get('office_weekly') or 0)
+            rate  = float(pricing.get('office_cleaner_rate') or 0)
+        elif stype == 'construction':
+            w_rev = float(pricing.get('construction_weekly') or 0)
+            rate  = float(pricing.get('construction_cleaner_rate') or 0)
+        else:
+            w_rev = rate = 0.0
+        pv_rev = w_rev / days
+        rev_map[sid] = {'name': sc.get('name', t.get('name', sid)), 'pv_rev': pv_rev, 'pv_lab': rate}
+
+    for cl in checklists:
+        raw = cl.get('submitted_at') or cl.get('date') or ''
+        if not raw: continue
+        d = ''
+        try:
+            dt = datetime.fromisoformat(raw.replace('Z',''))
+            d = dt.strftime('%Y-%m-%d')
+        except:
+            d = raw[:10]
+        if not in_period(d): continue
+        site_id = cl.get('site_id','')
+        rm = rev_map.get(site_id)
+        if not rm: continue
+        if rm['pv_rev'] > 0:
+            rows.append({
+                'Type': 'Income',
+                'Date': d,
+                'Reference': cl.get('id','')[:8],
+                'Description': f"Cleaning service — {rm['name']}",
+                'Category': 'Cleaning Revenue',
+                'Amount (AUD)': round(rm['pv_rev'], 2),
+                'GST': 0,
+            })
+        if rm['pv_lab'] > 0:
+            rows.append({
+                'Type': 'Expense',
+                'Date': d,
+                'Reference': cl.get('id','')[:8],
+                'Description': f"Cleaning labour — {rm['name']} ({cl.get('employee_name','')})",
+                'Category': 'Labour',
+                'Amount (AUD)': round(rm['pv_lab'], 2),
+                'GST': 0,
+            })
+
+    # ── EXPENSES: Manual expenses ──
+    for exp in load_json(EXPENSES_FILE):
+        d = exp.get('date','')
+        if not in_period(d): continue
+        rows.append({
+            'Type': 'Expense',
+            'Date': d,
+            'Reference': exp.get('id','')[:8],
+            'Description': exp.get('description',''),
+            'Category': exp.get('category','Expense'),
+            'Amount (AUD)': round(float(exp.get('amount',0)), 2),
+            'GST': 0,
+        })
+
+    rows.sort(key=lambda x: x['Date'])
+
+    out = _io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=['Type','Date','Reference','Description','Category','Amount (AUD)','GST'])
+    writer.writeheader()
+    writer.writerows(rows)
+
+    # Totals
+    income  = sum(r['Amount (AUD)'] for r in rows if r['Type']=='Income')
+    expense = sum(r['Amount (AUD)'] for r in rows if r['Type']=='Expense')
+    writer.writerow({})
+    writer.writerow({'Type':'SUMMARY','Date':'','Reference':'','Description':'Total Income','Category':'','Amount (AUD)':round(income,2),'GST':''})
+    writer.writerow({'Type':'SUMMARY','Date':'','Reference':'','Description':'Total Expenses','Category':'','Amount (AUD)':round(expense,2),'GST':''})
+    writer.writerow({'Type':'SUMMARY','Date':'','Reference':'','Description':'Net Profit','Category':'','Amount (AUD)':round(income-expense,2),'GST':''})
+
+    fname = f"Ridgeline_Tax_{year}{('-'+month.zfill(2) if month else '')}.csv"
+    return Response(out.getvalue(), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename="{fname}"'})
+
 
 # ── Invoice Builder ───────────────────────────────────────────────────────────
 def _load_invoices():
