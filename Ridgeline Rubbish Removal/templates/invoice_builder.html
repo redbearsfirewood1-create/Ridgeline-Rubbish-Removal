@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Invoice Builder — Ridgeline</title>
+<style>
+/* ── App chrome ─────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a1a;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+.topbar{background:#111;border-bottom:1px solid #1e3a1e;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.back{color:#3d8b3d;text-decoration:none;font-size:13px;font-weight:600}
+.topbar-title{font-size:15px;font-weight:800;color:#f0f0f0;flex:1}
+.topbar-status{font-size:12px;color:#666;font-style:italic}
+.btn{padding:9px 16px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;text-decoration:none;transition:.15s}
+.btn-save{background:#3d8b3d;color:#fff}.btn-save:hover{background:#4caf50}
+.btn-print{background:#1a2e1a;border:1px solid #2a4a2a;color:#4caf50}.btn-print:hover{background:#1f3a1f}
+.btn-email{background:#1a2a3a;border:1px solid #1e3a52;color:#4fc3f7}.btn-email:hover{background:#1e3348}
+.btn-status{background:#252525;border:1px solid #333;color:#ccc;font-size:12px;padding:7px 12px}
+.btn-status:hover{background:#2e2e2e}
+.saved-flash{color:#4caf50;font-size:12px;opacity:0;transition:opacity .4s}
+.saved-flash.show{opacity:1}
+
+/* ── Page canvas ───────────────────────────────────── */
+.canvas{padding:28px 20px 60px;display:flex;justify-content:center}
+
+/* ── Invoice paper ─────────────────────────────────── */
+.paper{background:#fff;width:100%;max-width:780px;min-height:1050px;border-radius:4px;box-shadow:0 8px 40px rgba(0,0,0,.5);padding:48px 52px;position:relative;color:#222}
+
+/* ── Editable field styles ─────────────────────────── */
+.f{border:none;outline:none;background:transparent;font-family:inherit;color:inherit;width:100%}
+.f:focus{background:#f7fff7;border-radius:3px;outline:1px solid #3d8b3d}
+.f::placeholder{color:#bbb}
+input.f{padding:2px 4px}
+textarea.f{resize:none;overflow:hidden;padding:2px 4px}
+
+/* ── Invoice layout ────────────────────────────────── */
+.inv-header{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:start;margin-bottom:36px}
+.brand-name{font-size:20px;font-weight:900;color:#1a3a1a;letter-spacing:-.3px}
+.brand-tagline{font-size:11px;color:#777;margin-top:3px}
+.brand-contact{margin-top:12px;font-size:12px;color:#555;line-height:1.9}
+.inv-title-block{text-align:right}
+.inv-word{font-size:34px;font-weight:900;color:#1a3a1a;letter-spacing:1px}
+.meta-grid{margin-top:12px;display:grid;grid-template-columns:auto 160px;gap:4px 10px;align-items:center;font-size:13px}
+.meta-label{color:#888;font-weight:600;text-align:right;white-space:nowrap}
+.meta-val input.f{text-align:left;font-size:13px;border-bottom:1px solid #e0e0e0;border-radius:0}
+.meta-val input.f:focus{border-bottom-color:#3d8b3d;background:#f7fff7}
+
+.section-title{font-size:10px;font-weight:800;letter-spacing:1px;color:#1a3a1a;text-transform:uppercase;margin-bottom:10px;border-bottom:2px solid #1a3a1a;padding-bottom:4px;display:inline-block}
+
+/* Bill to */
+.bill-to{margin-bottom:32px}
+.bill-grid{display:grid;grid-template-columns:120px 1fr;gap:5px 10px;align-items:center;font-size:13px}
+.bill-label{color:#888;font-weight:600}
+.bill-input input.f{border-bottom:1px solid #e8e8e8;border-radius:0;font-size:13px}
+.bill-input input.f:focus{border-bottom-color:#3d8b3d;background:#f7fff7}
+
+/* Line items */
+.items-section{margin-bottom:28px}
+.items-header{display:grid;grid-template-columns:1fr 70px 110px 32px;gap:8px;padding:7px 10px;background:#1a3a1a;border-radius:5px 5px 0 0}
+.items-header span{font-size:10px;font-weight:800;letter-spacing:.5px;color:#a5d6a7;text-transform:uppercase}
+.items-header .col-qty{text-align:center}
+.items-header .col-total{text-align:right}
+.line-item{display:grid;grid-template-columns:1fr 70px 110px 32px;gap:8px;padding:8px 10px;border-bottom:1px solid #f0f0f0;align-items:center}
+.line-item:last-child{border-bottom:none}
+.line-item:hover{background:#fafff9}
+.line-item input.f{font-size:13px}
+.li-desc{}
+.li-qty input.f{text-align:center;font-size:13px}
+.li-total input.f{text-align:right;font-size:13px}
+.li-del{display:flex;align-items:center;justify-content:center}
+.btn-del{background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center}
+.btn-del:hover{background:#fee;color:#e53935}
+.btn-add-line{margin-top:8px;background:none;border:1px dashed #ccc;color:#888;cursor:pointer;font-size:12px;padding:7px 14px;border-radius:6px;font-weight:600}
+.btn-add-line:hover{border-color:#3d8b3d;color:#3d8b3d;background:#f7fff7}
+
+/* Notes */
+.notes-section{margin-bottom:28px}
+textarea.notes-area{width:100%;font-size:13px;color:#555;border:1px dashed #e0e0e0;border-radius:5px;padding:10px;min-height:60px;background:transparent;font-family:inherit;resize:vertical;outline:none}
+textarea.notes-area:focus{border-color:#3d8b3d;background:#f7fff7}
+
+/* Totals */
+.totals{display:flex;justify-content:flex-end;margin-bottom:32px}
+.totals-box{width:280px}
+.total-row{display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;padding:4px 0;font-size:13px}
+.total-row.divider{border-top:1px solid #e0e0e0;padding-top:8px;margin-top:4px}
+.total-row.grand{font-size:16px;font-weight:900;color:#1a3a1a;border-top:2px solid #1a3a1a;padding-top:8px;margin-top:4px}
+.t-label{color:#777;text-align:right}
+.t-val{text-align:right;font-weight:600}
+.t-val input.f{text-align:right;font-size:13px;border-bottom:1px solid #e8e8e8;border-radius:0}
+.t-val input.f:focus{border-bottom-color:#3d8b3d;background:#f7fff7}
+.gst-row .t-label{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.gst-rate-input{width:38px;border:1px solid #e0e0e0;border-radius:4px;text-align:center;font-size:12px;padding:1px 3px;font-family:inherit}
+.gst-rate-input:focus{outline:1px solid #3d8b3d}
+
+/* Payment */
+.payment-section{margin-bottom:28px;background:#f8fff8;border-radius:6px;border:1px solid #e0ede0;padding:16px 20px}
+.payment-grid{display:grid;grid-template-columns:150px 1fr;gap:5px 10px;font-size:13px;align-items:center}
+.payment-label{color:#888;font-weight:600}
+
+/* Footer note */
+.inv-footer-note{font-size:11px;color:#999;line-height:1.6;border-top:1px solid #eee;padding-top:16px}
+
+/* ── Print styles ──────────────────────────────────── */
+@media print {
+  body{background:#fff}
+  .topbar,.btn-del,.btn-add-line,.no-print{display:none!important}
+  .canvas{padding:0}
+  .paper{box-shadow:none;border-radius:0;padding:32px 40px;min-height:auto}
+  .f:focus{background:transparent;outline:none}
+  .notes-area:focus{border-color:#e0e0e0;background:transparent}
+  .meta-val input.f,.bill-input input.f,.t-val input.f{border-bottom:none}
+  .line-item:hover{background:transparent}
+  textarea.notes-area{border:none}
+  .items-section,.totals,.bill-to,.payment-section,.inv-footer-note{page-break-inside:avoid}
+}
+
+/* ── Email modal ───────────────────────────────────── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#1a1a1a;border:1px solid #2a4a2a;border-radius:16px;padding:28px;width:100%;max-width:420px;color:#f0f0f0}
+.modal h3{font-size:16px;margin-bottom:16px}
+.modal label{font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600}
+.modal input{width:100%;background:#111;border:1px solid #333;color:#f0f0f0;padding:9px 12px;border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:14px}
+.modal input:focus{outline:1px solid #3d8b3d}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end}
+.btn-cancel{background:#222;border:1px solid #333;color:#ccc;padding:9px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px}
+.btn-send{background:#1a2a3a;border:1px solid #1e3a52;color:#4fc3f7;padding:9px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px}
+.btn-send:hover{background:#1e3348}
+</style>
+</head>
+<body>
+
+<!-- ── Top bar ── -->
+<div class="topbar no-print">
+  <a href="/invoices" class="back">← Invoices</a>
+  <span class="topbar-title" id="topbarTitle">Invoice</span>
+  <span class="topbar-status" id="savedFlash"></span>
+  <select id="statusSel" class="btn btn-status" onchange="saveDraft()">
+    <option value="draft">Draft</option>
+    <option value="sent">Sent</option>
+    <option value="paid">Paid ✓</option>
+    <option value="overdue">Overdue</option>
+  </select>
+  <button class="btn btn-save" onclick="saveDraft()">💾 Save</button>
+  <button class="btn btn-print" onclick="printInvoice()">🖨 Print / PDF</button>
+  <button class="btn btn-email" onclick="openEmail()">✉ Email</button>
+</div>
+
+<!-- ── Invoice paper ── -->
+<div class="canvas">
+<div class="paper" id="invoicePaper">
+
+  <!-- Header -->
+  <div class="inv-header">
+    <div>
+      <div class="brand-name">RIDGELINE RUBBISH REMOVAL</div>
+      <div class="brand-tagline">Rubbish Removal &nbsp;·&nbsp; Furniture Specialists &nbsp;·&nbsp; Commercial Cleaning</div>
+      <div class="brand-contact" style="margin-top:14px;font-size:12px;color:#555;line-height:2">
+        📞 &nbsp;0458 749 281<br>
+        ✉ &nbsp;ridgelinesupport1@gmail.com
+      </div>
+    </div>
+    <div class="inv-title-block">
+      <div class="inv-word">INVOICE</div>
+      <div class="meta-grid">
+        <span class="meta-label">Invoice No.</span>
+        <div class="meta-val"><input class="f" id="f_inv_number" type="text" placeholder="RRR-INV-0103" value="{{ invoice_number }}"></div>
+        <span class="meta-label">Date</span>
+        <div class="meta-val"><input class="f" id="f_date" type="date" value="{{ today }}"></div>
+        <span class="meta-label">Due date</span>
+        <div class="meta-val"><input class="f" id="f_due_date" type="date" value="{{ due }}"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bill To -->
+  <div class="bill-to">
+    <div class="section-title">Bill To</div>
+    <div class="bill-grid" style="margin-top:10px">
+      <span class="bill-label">Contact name</span>
+      <div class="bill-input"><input class="f" id="f_contact" type="text" placeholder="Full name"></div>
+      <span class="bill-label">Email address</span>
+      <div class="bill-input"><input class="f" id="f_email" type="email" placeholder="client@email.com"></div>
+      <span class="bill-label">Company name</span>
+      <div class="bill-input"><input class="f" id="f_company" type="text" placeholder="Company Pty Ltd"></div>
+      <span class="bill-label">Phone</span>
+      <div class="bill-input"><input class="f" id="f_phone" type="text" placeholder="04xx xxx xxx"></div>
+    </div>
+  </div>
+
+  <!-- Line items -->
+  <div class="items-section">
+    <div class="items-header">
+      <span>Scope of Works / Description</span>
+      <span class="col-qty">QTY</span>
+      <span class="col-total">TOTAL ($)</span>
+      <span></span>
+    </div>
+    <div id="lineItems"></div>
+    <button class="btn-add-line no-print" onclick="addLine()">+ Add line item</button>
+  </div>
+
+  <!-- Notes -->
+  <div class="notes-section">
+    <div class="section-title">Notes / Exclusions</div>
+    <textarea id="f_notes" class="notes-area" rows="3" placeholder="e.g. Price excludes hazardous waste disposal. Payment due within 14 days."></textarea>
+  </div>
+
+  <!-- Totals -->
+  <div class="totals">
+    <div class="totals-box">
+      <div class="total-row">
+        <span class="t-label">Subtotal (ex GST)</span>
+        <span class="t-val" id="disp_subtotal">$0.00</span>
+      </div>
+      <div class="total-row">
+        <span class="t-label">Less discount ($)</span>
+        <div class="t-val"><input class="f" id="f_discount" type="number" min="0" step="0.01" value="0" placeholder="0" oninput="recalc()"></div>
+      </div>
+      <div class="total-row gst-row">
+        <span class="t-label">GST &nbsp;<input id="f_gst_rate" class="gst-rate-input no-print" type="number" min="0" max="30" step="1" value="0" oninput="recalc()">%</span>
+        <span class="t-val" id="disp_gst">$0.00</span>
+      </div>
+      <div class="total-row grand divider">
+        <span class="t-label" style="color:#1a3a1a;font-weight:800">TOTAL DUE</span>
+        <span class="t-val" id="disp_total" style="font-size:17px">$0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payment details -->
+  <div class="payment-section">
+    <div class="section-title">Payment Details</div>
+    <div class="payment-grid" style="margin-top:10px">
+      <span class="payment-label">Account name</span><span>Robert Mackay</span>
+      <span class="payment-label">BSB</span><span>062-121</span>
+      <span class="payment-label">Account number</span><span>1077 3420</span>
+      <span class="payment-label">Payment reference</span><span>Please quote the invoice number above</span>
+    </div>
+  </div>
+
+  <!-- Footer note -->
+  <div class="inv-footer-note">
+    Payment is due by the due date shown above. Please email remittance to the address at the top of this invoice.
+    Overdue accounts may incur a late fee and further work may be placed on hold until the account is settled.
+  </div>
+
+</div><!-- /paper -->
+</div><!-- /canvas -->
+
+<!-- Email modal -->
+<div class="modal-bg" id="emailModal">
+  <div class="modal">
+    <h3>✉ Email Invoice</h3>
+    <label>Recipient email</label>
+    <input id="emailTo" type="email" placeholder="client@email.com">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeEmail()">Cancel</button>
+      <button class="btn-send" onclick="sendEmail()">Send Invoice</button>
+    </div>
+    <div id="emailStatus" style="margin-top:10px;font-size:13px;text-align:center"></div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+const INVOICE_ID = "{{ invoice_id }}";
+let savedId = INVOICE_ID === 'new' ? null : INVOICE_ID;
+const SAVED_DATA = {{ saved | tojson if saved is defined else '{}' }};
+
+// ── Line item helpers ─────────────────────────────────────
+let lineCount = 0;
+
+function addLine(desc='', qty='1x', total='') {
+  lineCount++;
+  const id = lineCount;
+  const div = document.createElement('div');
+  div.className = 'line-item';
+  div.id = `li-${id}`;
+  div.innerHTML = `
+    <div class="li-desc"><input class="f" type="text" placeholder="Description of work / site" value="${esc(desc)}" oninput="recalc()"></div>
+    <div class="li-qty"><input class="f" type="text" placeholder="1x" value="${esc(qty)}"></div>
+    <div class="li-total"><input class="f" type="number" min="0" step="0.01" placeholder="0.00" value="${total}" oninput="recalc()"></div>
+    <div class="li-del"><button class="btn-del no-print" onclick="removeLine(${id})" title="Remove">×</button></div>`;
+  document.getElementById('lineItems').appendChild(div);
+  recalc();
+}
+
+function removeLine(id) {
+  document.getElementById(`li-${id}`)?.remove();
+  recalc();
+}
+
+function esc(s) { return String(s||'').replace(/"/g,'&quot;'); }
+
+function getLines() {
+  return [...document.querySelectorAll('#lineItems .line-item')].map(row => {
+    const inputs = row.querySelectorAll('input');
+    return {
+      description: inputs[0]?.value || '',
+      qty:         inputs[1]?.value || '1x',
+      total:       parseFloat(inputs[2]?.value) || 0
+    };
+  });
+}
+
+// ── Totals ────────────────────────────────────────────────
+function recalc() {
+  const lines = getLines();
+  const sub   = lines.reduce((s,l) => s + l.total, 0);
+  const disc  = parseFloat(document.getElementById('f_discount')?.value) || 0;
+  const gstR  = parseFloat(document.getElementById('f_gst_rate')?.value) || 0;
+  const after = sub - disc;
+  const gst   = after * gstR / 100;
+  const total = after + gst;
+  const fmt = n => '$' + Math.max(0,n).toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('disp_subtotal').textContent = fmt(sub);
+  document.getElementById('disp_gst').textContent      = fmt(gst);
+  document.getElementById('disp_total').textContent    = fmt(total);
+  document.title = `Invoice ${document.getElementById('f_inv_number')?.value || ''} — Ridgeline`;
+}
+
+// ── Collect form data ─────────────────────────────────────
+function collectData() {
+  return {
+    id:             savedId,
+    invoice_number: v('f_inv_number'),
+    date:           v('f_date'),
+    due_date:       v('f_due_date'),
+    status:         document.getElementById('statusSel')?.value || 'draft',
+    bill_to: {
+      contact: v('f_contact'),
+      email:   v('f_email'),
+      company: v('f_company'),
+      phone:   v('f_phone'),
+    },
+    line_items: getLines(),
+    notes:      v('f_notes'),
+    discount:   parseFloat(v('f_discount')) || 0,
+    gst_rate:   parseFloat(v('f_gst_rate')) || 0,
+  };
+}
+
+function v(id) { return document.getElementById(id)?.value || ''; }
+
+// ── Save ──────────────────────────────────────────────────
+async function saveDraft() {
+  const data = collectData();
+  if (savedId) data.id = savedId;
+  const res  = await fetch('/api/invoices', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const json = await res.json();
+  if (json.id) {
+    savedId = json.id;
+    history.replaceState(null,'',`/invoices/${savedId}/edit`);
+  }
+  flash('Saved ✓');
+}
+
+function flash(msg) {
+  const el = document.getElementById('savedFlash');
+  el.textContent = msg;
+  el.style.opacity = 1;
+  setTimeout(() => { el.style.opacity = 0; }, 2000);
+}
+
+// ── Print ─────────────────────────────────────────────────
+function printInvoice() {
+  // Replace GST rate input with plain text for print
+  const gstEl = document.getElementById('f_gst_rate');
+  const gstVal = gstEl?.value || '0';
+  if (gstEl) gstEl.style.display = 'none';
+  document.querySelectorAll('.gst-row .t-label').forEach(el => {
+    el.dataset.orig = el.innerHTML;
+    el.innerHTML = `GST&nbsp;${gstVal}%`;
+  });
+  window.print();
+  // Restore
+  if (gstEl) gstEl.style.display = '';
+  document.querySelectorAll('.gst-row .t-label').forEach(el => {
+    if (el.dataset.orig) el.innerHTML = el.dataset.orig;
+  });
+}
+
+// ── Email ─────────────────────────────────────────────────
+function openEmail() {
+  document.getElementById('emailTo').value = v('f_email');
+  document.getElementById('emailStatus').textContent = '';
+  document.getElementById('emailModal').classList.add('open');
+}
+function closeEmail() { document.getElementById('emailModal').classList.remove('open'); }
+
+async function sendEmail() {
+  await saveDraft();
+  const to = document.getElementById('emailTo').value.trim();
+  if (!to) { document.getElementById('emailStatus').textContent = 'Enter a recipient email.'; return; }
+  document.getElementById('emailStatus').textContent = 'Sending…';
+
+  // Build clean HTML for the email body
+  const invNum  = v('f_inv_number');
+  const date    = v('f_date');
+  const due     = v('f_due_date');
+  const contact = v('f_contact');
+  const company = v('f_company');
+  const notes   = v('f_notes');
+  const lines   = getLines();
+  const disc    = parseFloat(v('f_discount'))||0;
+  const gstRate = parseFloat(v('f_gst_rate'))||0;
+  const sub     = lines.reduce((s,l)=>s+l.total,0);
+  const after   = sub-disc;
+  const gst     = after*gstRate/100;
+  const total   = after+gst;
+  const fmt     = n => '$'+n.toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtDate = d => { try{return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}catch{return d}};
+
+  const linesHtml = lines.map(l=>`
+    <tr>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${l.description}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;text-align:center;">${l.qty}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;text-align:right;font-weight:600;">${fmt(l.total)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<div style="max-width:640px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);">
+  <div style="background:#1a3a1a;padding:28px 36px;">
+    <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:.5px;">RIDGELINE RUBBISH REMOVAL</div>
+    <div style="font-size:11px;color:#a5d6a7;margin-top:4px;">Rubbish Removal · Furniture Specialists · Commercial Cleaning</div>
+  </div>
+  <div style="padding:32px 36px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a3a1a;text-transform:uppercase;margin-bottom:8px;">Bill To</div>
+        <div style="font-size:14px;font-weight:700;">${company||contact}</div>
+        ${contact&&company?`<div style="font-size:13px;color:#666;">${contact}</div>`:''}
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:28px;font-weight:900;color:#1a3a1a;">INVOICE</div>
+        <div style="font-size:13px;margin-top:6px;color:#666;"><strong>${invNum}</strong></div>
+        <div style="font-size:12px;color:#888;margin-top:3px;">Date: ${fmtDate(date)}</div>
+        <div style="font-size:12px;color:#c0392b;font-weight:700;margin-top:3px;">Due: ${fmtDate(due)}</div>
+      </div>
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:20px;">
+      <thead><tr style="background:#1a3a1a;">
+        <th style="padding:10px 12px;text-align:left;font-size:11px;color:#a5d6a7;font-weight:800;letter-spacing:.5px;text-transform:uppercase;">Scope of Works</th>
+        <th style="padding:10px 12px;text-align:center;font-size:11px;color:#a5d6a7;font-weight:800;letter-spacing:.5px;text-transform:uppercase;">QTY</th>
+        <th style="padding:10px 12px;text-align:right;font-size:11px;color:#a5d6a7;font-weight:800;letter-spacing:.5px;text-transform:uppercase;">Total</th>
+      </tr></thead>
+      <tbody>${linesHtml}</tbody>
+    </table>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:24px;">
+      <table cellpadding="0" cellspacing="0" style="width:260px;">
+        <tr><td style="padding:4px 0;font-size:13px;color:#888;text-align:right;padding-right:12px;">Subtotal</td><td style="text-align:right;font-size:13px;">${fmt(sub)}</td></tr>
+        ${disc?`<tr><td style="padding:4px 0;font-size:13px;color:#888;text-align:right;padding-right:12px;">Less discount</td><td style="text-align:right;font-size:13px;">−${fmt(disc)}</td></tr>`:''}
+        ${gstRate?`<tr><td style="padding:4px 0;font-size:13px;color:#888;text-align:right;padding-right:12px;">GST (${gstRate}%)</td><td style="text-align:right;font-size:13px;">${fmt(gst)}</td></tr>`:''}
+        <tr style="border-top:2px solid #1a3a1a;"><td style="padding:10px 0 4px;font-size:15px;font-weight:900;color:#1a3a1a;text-align:right;padding-right:12px;">TOTAL DUE</td><td style="padding:10px 0 4px;text-align:right;font-size:17px;font-weight:900;color:#1a3a1a;">${fmt(total)}</td></tr>
+      </table>
+    </div>
+    ${notes?`<div style="background:#f8fff8;border-radius:6px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#555;border:1px solid #e0ede0;"><strong style="color:#1a3a1a;">Notes:</strong> ${notes}</div>`:''}
+    <div style="background:#f8fff8;border-radius:6px;padding:16px 20px;margin-bottom:20px;border:1px solid #e0ede0;">
+      <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a3a1a;text-transform:uppercase;margin-bottom:10px;">Payment Details</div>
+      <table cellpadding="0" cellspacing="0" style="font-size:13px;">
+        <tr><td style="color:#888;padding-right:16px;padding-bottom:4px;">Account name</td><td style="font-weight:600;">Robert Mackay</td></tr>
+        <tr><td style="color:#888;padding-right:16px;padding-bottom:4px;">BSB</td><td>062-121</td></tr>
+        <tr><td style="color:#888;padding-right:16px;padding-bottom:4px;">Account number</td><td>1077 3420</td></tr>
+        <tr><td style="color:#888;padding-right:16px;">Reference</td><td>Please quote ${invNum}</td></tr>
+      </table>
+    </div>
+    <p style="font-size:11px;color:#aaa;line-height:1.6;">Payment is due by the due date shown above. Please email remittance to ridgelinesupport1@gmail.com. Overdue accounts may incur a late fee.</p>
+  </div>
+  <div style="background:#f4f4f4;padding:16px 36px;text-align:center;font-size:11px;color:#aaa;">
+    Ridgeline Rubbish Removal &nbsp;|&nbsp; 0458 749 281 &nbsp;|&nbsp; ridgelinesupport1@gmail.com
+  </div>
+</div></body></html>`;
+
+  const res = await fetch(`/api/invoices/${savedId}/email`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({to_email: to, html, invoice_number: invNum})
+  });
+  const json = await res.json();
+  if (json.success) {
+    document.getElementById('emailStatus').style.color = '#4caf50';
+    document.getElementById('emailStatus').textContent = '✓ Invoice sent!';
+    // mark as sent
+    document.getElementById('statusSel').value = 'sent';
+    await saveDraft();
+    setTimeout(closeEmail, 1500);
+  } else {
+    document.getElementById('emailStatus').style.color = '#ef5350';
+    document.getElementById('emailStatus').textContent = json.error || 'Send failed.';
+  }
+}
+
+// ── Load saved data ───────────────────────────────────────
+function loadSaved() {
+  const d = SAVED_DATA;
+  if (!d || !d.invoice_number) return; // new invoice — prefills already applied by template
+  set('f_inv_number', d.invoice_number);
+  set('f_date',       d.date);
+  set('f_due_date',   d.due_date);
+  if (d.status) document.getElementById('statusSel').value = d.status;
+  const bt = d.bill_to || {};
+  set('f_contact', bt.contact); set('f_email', bt.email);
+  set('f_company', bt.company); set('f_phone', bt.phone);
+  set('f_notes',    d.notes);
+  set('f_discount', d.discount || 0);
+  set('f_gst_rate', d.gst_rate || 0);
+  (d.line_items || []).forEach(l => addLine(l.description, l.qty, l.total));
+}
+
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el && val !== undefined && val !== null) el.value = val;
+}
+
+// ── Init ──────────────────────────────────────────────────
+if (Object.keys(SAVED_DATA).length) {
+  loadSaved();
+} else {
+  addLine(); // start with one empty line
+}
+recalc();
+
+document.getElementById('topbarTitle').textContent =
+  document.getElementById('f_inv_number')?.value || 'New Invoice';
+document.getElementById('f_inv_number')?.addEventListener('input', e => {
+  document.getElementById('topbarTitle').textContent = e.target.value || 'New Invoice';
+});
+</script>
+</body>
+</html>

@@ -61,7 +61,8 @@ BUSINESS_PHONE = os.environ.get('BUSINESS_PHONE', '')
 
 DATA_DIR     = os.path.join(os.path.dirname(__file__), 'data')
 PHOTOS_DIR   = os.path.join(DATA_DIR, 'photos')
-QUOTES_FILE  = os.path.join(DATA_DIR, 'quotes.json')
+QUOTES_FILE   = os.path.join(DATA_DIR, 'quotes.json')
+INVOICES_FILE = os.path.join(DATA_DIR, 'invoices.json')
 EXPENSES_FILE= os.path.join(DATA_DIR, 'expenses.json')
 TRUCKS_FILE      = os.path.join(DATA_DIR, 'trucks.json')
 EMPLOYEES_FILE   = os.path.join(DATA_DIR, 'employees.json')
@@ -2380,6 +2381,106 @@ def api_sites_with_clients():
                 'logo_url':    logo_url,
             }
     return jsonify(result)
+
+# ── Invoice Builder ───────────────────────────────────────────────────────────
+def _load_invoices():
+    try:
+        with open(INVOICES_FILE) as f: return json.load(f)
+    except: return {}
+
+def _save_invoices(data):
+    with open(INVOICES_FILE, 'w') as f: json.dump(data, f, indent=2, default=str)
+
+def _next_inv_number():
+    invs = _load_invoices()
+    nums = []
+    for v in invs.values():
+        n = v.get('invoice_number', '')
+        if n.startswith('RRR-INV-'):
+            try: nums.append(int(n[8:]))
+            except: pass
+    return f"RRR-INV-{(max(nums) + 1 if nums else 103):04d}"
+
+@app.route('/invoices')
+@login_required
+def invoices_page():
+    return render_template('invoices.html')
+
+@app.route('/invoices/new')
+@login_required
+def invoice_new():
+    from datetime import timedelta
+    today = sydney_now().strftime('%Y-%m-%d')
+    due   = (sydney_now() + timedelta(days=14)).strftime('%Y-%m-%d')
+    return render_template('invoice_builder.html',
+        invoice_id='new',
+        invoice_number=_next_inv_number(),
+        today=today, due=due)
+
+@app.route('/invoices/<inv_id>/edit')
+@login_required
+def invoice_edit(inv_id):
+    invs = _load_invoices()
+    inv  = invs.get(inv_id, {})
+    return render_template('invoice_builder.html',
+        invoice_id=inv_id,
+        invoice_number=inv.get('invoice_number', ''),
+        today=inv.get('date', sydney_now().strftime('%Y-%m-%d')),
+        due=inv.get('due_date', ''),
+        saved=inv)
+
+@app.route('/api/invoices', methods=['GET'])
+@login_required
+def api_invoices_get():
+    invs = _load_invoices()
+    return jsonify(sorted(invs.values(), key=lambda x: x.get('created_at',''), reverse=True))
+
+@app.route('/api/invoices', methods=['POST'])
+@login_required
+def api_invoices_save():
+    data = request.json or {}
+    invs = _load_invoices()
+    inv_id = data.get('id') or uuid.uuid4().hex[:8]
+    data['id'] = inv_id
+    if 'created_at' not in data:
+        data['created_at'] = sydney_now().isoformat()
+    data['updated_at'] = sydney_now().isoformat()
+    invs[inv_id] = data
+    _save_invoices(invs)
+    return jsonify({'success': True, 'id': inv_id})
+
+@app.route('/api/invoices/<inv_id>', methods=['DELETE'])
+@login_required
+def api_invoice_delete_new(inv_id):
+    invs = _load_invoices()
+    invs.pop(inv_id, None)
+    _save_invoices(invs)
+    return jsonify({'success': True})
+
+@app.route('/api/invoices/<inv_id>/email', methods=['POST'])
+@login_required
+def api_invoice_email(inv_id):
+    if not SMTP_PASS:
+        return jsonify({'error': 'Email not configured. Add SMTP_USER and SMTP_PASS to Render env vars.'}), 500
+    data     = request.json or {}
+    to_email = data.get('to_email', '').strip()
+    inv_html = data.get('html', '')
+    inv_num  = data.get('invoice_number', inv_id)
+    if not to_email:
+        return jsonify({'error': 'No recipient email provided'}), 400
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f'Invoice {inv_num} — Ridgeline Rubbish Removal'
+        msg['From']    = f'Ridgeline Rubbish Removal <{SMTP_USER}>'
+        msg['To']      = to_email
+        msg.attach(MIMEText(inv_html, 'html'))
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as srv:
+            srv.ehlo(); srv.starttls(); srv.ehlo()
+            srv.login(SMTP_USER, SMTP_PASS)
+            srv.sendmail(SMTP_USER, [to_email], msg.as_string())
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
