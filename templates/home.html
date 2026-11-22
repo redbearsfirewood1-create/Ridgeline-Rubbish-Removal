@@ -43,20 +43,22 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
 .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
 
 /* ── Cleaning KPIs ── */
-.kpi-section { max-width: 600px; margin: 0 auto 28px; padding: 0 16px; }
-.kpi-heading { font-size: 13px; font-weight: 800; color: #3d8b3d; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 10px; }
-.kpi-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 20px; }
-.kpi-card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 16px 10px; text-align: center; }
-.kpi-num  { font-size: 26px; font-weight: 900; color: #f0f0f0; line-height: 1; }
-.kpi-unit { font-size: 11px; color: #3d8b3d; font-weight: 700; margin-top: 2px; }
-.kpi-lbl  { font-size: 11px; color: #555; margin-top: 4px; }
-.emp-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media(max-width:420px){ .emp-kpi-grid{grid-template-columns:1fr;} }
-.emp-kpi-card { background: #141414; border: 1px solid #222; border-radius: 14px; padding: 14px 12px; }
-.emp-kpi-name { font-size: 13px; font-weight: 800; color: #f0f0f0; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.emp-kpi-time { font-size: 24px; font-weight: 900; color: #3d8b3d; }
-.emp-kpi-time-lbl { font-size: 10px; color: #555; margin-bottom: 8px; }
-.emp-kpi-total { font-size: 11px; color: #666; margin-bottom: 8px; }
+/* ── Performance tile ── */
+.tile-perf { grid-column: 1/-1; padding: 0 !important; overflow: hidden; cursor: default; }
+.tile-perf-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #111; border-bottom: 1px solid #1e3a1e; border-radius: 16px 16px 0 0; }
+.tile-perf-body { padding: 16px; }
+.perf-section-label { font-size: 11px; font-weight: 800; color: #3d8b3d; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 8px; }
+.perf-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.perf-card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px 10px; text-align: center; flex: 1; min-width: 80px; }
+.perf-num  { font-size: 22px; font-weight: 900; color: #f0f0f0; line-height: 1; }
+.perf-lbl  { font-size: 10px; color: #555; margin-top: 4px; }
+.perf-profit .perf-num { color: #4caf50; }
+.perf-emp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 8px; }
+.emp-kpi-card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px; }
+.emp-kpi-name { font-size: 12px; font-weight: 800; color: #f0f0f0; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.emp-kpi-time { font-size: 20px; font-weight: 900; color: #3d8b3d; }
+.emp-kpi-time-lbl { font-size: 10px; color: #555; margin-bottom: 6px; }
+.emp-kpi-total { font-size: 11px; color: #666; }
 .day-pills { display: flex; flex-wrap: wrap; gap: 4px; }
 .day-pill { font-size: 9px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #1e3a1e; color: #6fcf6f; }
 .day-pill.top { background: #3d8b3d; color: #fff; }
@@ -173,62 +175,6 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
   <div class="stat"><div class="stat-val" id="sRevenue">—</div><div class="stat-lbl">This Month</div></div>
 </div>
 
-<!-- Cleaning KPIs -->
-<div class="kpi-section">
-  <div class="kpi-heading">🧹 Cleaning Performance</div>
-  <div class="kpi-row">
-    <div class="kpi-card">
-      <div class="kpi-num" id="kTotal">—</div>
-      <div class="kpi-lbl">Total Sites Cleaned</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-num" id="kKitchen">—</div>
-      <div class="kpi-unit" id="kKitchenU" style="display:none">avg mins</div>
-      <div class="kpi-lbl">With Kitchen</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-num" id="kNoKitchen">—</div>
-      <div class="kpi-unit" id="kNoKitchenU" style="display:none">avg mins</div>
-      <div class="kpi-lbl">No Kitchen</div>
-    </div>
-  </div>
-
-  <div class="kpi-heading">👷 Employee Performance</div>
-  <div class="emp-kpi-grid" id="empKpiGrid">
-    <div style="color:#444;font-size:13px;padding:8px;">Loading…</div>
-  </div>
-
-  <div class="kpi-heading" style="margin-top:20px;">💰 Revenue — This Week</div>
-  <div class="kpi-row" id="revRow">
-    <div class="kpi-card">
-      <div class="kpi-num" id="revEarned">—</div>
-      <div class="kpi-unit">AUD</div>
-      <div class="kpi-lbl">Earned</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-num" id="revLabor">—</div>
-      <div class="kpi-unit">AUD</div>
-      <div class="kpi-lbl">Labor Cost</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-num" id="revProfit">—</div>
-      <div class="kpi-unit">AUD</div>
-      <div class="kpi-lbl">Profit</div>
-    </div>
-  </div>
-  <div class="kpi-row" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
-    <div class="kpi-card">
-      <div class="kpi-num" id="revContracted">—</div>
-      <div class="kpi-unit">AUD/mo</div>
-      <div class="kpi-lbl">Contracted (monthly)</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-num" id="revProfitContracted">—</div>
-      <div class="kpi-unit">AUD/mo</div>
-      <div class="kpi-lbl">Expected Profit</div>
-    </div>
-  </div>
-</div>
 
 <div class="tiles">
   <a href="/quote" class="tile">
@@ -276,6 +222,46 @@ body { font-family: Arial, sans-serif; background: #0d0d0d; min-height: 100dvh; 
     <div class="tile-label">Clients</div>
     <div class="tile-sub">Portal access</div>
   </a>
+  <a href="/invoices" class="tile">
+    <div class="tile-icon">🧾</div>
+    <div class="tile-label">Invoices</div>
+    <div class="tile-sub">Build &amp; send invoices</div>
+  </a>
+  <!-- ── Performance tile ── -->
+  <div class="tile tile-perf" style="grid-column:1/-1;cursor:default;">
+    <div class="tile-perf-hdr">
+      <span style="font-size:20px;">📊</span>
+      <div>
+        <div style="font-size:15px;font-weight:800;color:#f0f0f0;">Performance</div>
+        <div style="font-size:11px;color:#555;">Cleaning · Staff · Revenue</div>
+      </div>
+      <a href="/dashboard" style="margin-left:auto;font-size:12px;color:#3d8b3d;font-weight:700;text-decoration:none;">Full dashboard →</a>
+    </div>
+    <div class="tile-perf-body">
+      <!-- Cleaning row -->
+      <div class="perf-section-label">🧹 Cleaning This Week</div>
+      <div class="perf-row" id="perfCleanRow">
+        <div class="perf-card"><div class="perf-num" id="kTotal">—</div><div class="perf-lbl">Sites Cleaned</div></div>
+        <div class="perf-card"><div class="perf-num" id="kKitchen">—</div><div class="perf-lbl">With Kitchen</div></div>
+        <div class="perf-card"><div class="perf-num" id="kNoKitchen">—</div><div class="perf-lbl">No Kitchen</div></div>
+      </div>
+      <!-- Revenue row -->
+      <div class="perf-section-label" style="margin-top:14px;">💰 Revenue This Week</div>
+      <div class="perf-row">
+        <div class="perf-card"><div class="perf-num" id="revEarned">—</div><div class="perf-lbl">Earned</div></div>
+        <div class="perf-card"><div class="perf-num" id="revLabor">—</div><div class="perf-lbl">Labor Cost</div></div>
+        <div class="perf-card perf-profit"><div class="perf-num" id="revProfit">—</div><div class="perf-lbl">Profit</div></div>
+        <div class="perf-card"><div class="perf-num" id="revContracted">—</div><div class="perf-lbl">Contracted/mo</div></div>
+        <div class="perf-card"><div class="perf-num" id="revProfitContracted">—</div><div class="perf-lbl">Expected Profit/mo</div></div>
+      </div>
+      <!-- Employee row -->
+      <div class="perf-section-label" style="margin-top:14px;">👷 Employee Performance</div>
+      <div class="perf-emp-grid" id="empKpiGrid">
+        <div style="color:#444;font-size:12px;padding:6px;">Loading…</div>
+      </div>
+    </div>
+  </div>
+
   <div class="tile tile-map" style="border-color:#1a2e1a;">
     <a href="/monitor" class="tile-map-hdr">
       <span style="font-size:22px;">📡</span>

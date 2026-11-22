@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Invoices — Ridgeline</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d0d;color:#f0f0f0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+.topbar{background:#111;border-bottom:1px solid #1e3a1e;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.back{color:#3d8b3d;text-decoration:none;font-size:14px;font-weight:600}
+.back:hover{color:#4caf50}
+h1{font-size:18px;font-weight:800}
+.btn-new{background:#3d8b3d;color:#fff;border:none;padding:10px 20px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn-new:hover{background:#4caf50}
+.container{max-width:900px;margin:0 auto;padding:28px 20px}
+.empty{text-align:center;padding:80px 20px;color:#555}
+.empty-icon{font-size:48px;margin-bottom:16px}
+.table{width:100%;border-collapse:collapse}
+.table th{text-align:left;font-size:11px;color:#666;font-weight:700;letter-spacing:.5px;padding:8px 12px;border-bottom:1px solid #1e1e1e}
+.table td{padding:14px 12px;border-bottom:1px solid #161616;vertical-align:middle}
+.table tr:hover td{background:#141414}
+.inv-num{font-weight:800;color:#f0f0f0;font-size:14px}
+.inv-company{font-size:13px;color:#aaa;margin-top:2px}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-draft{background:#1e1e1e;color:#666}
+.badge-sent{background:#1a2e3a;color:#4fc3f7}
+.badge-paid{background:#1a3a1a;color:#4caf50}
+.badge-overdue{background:#3a1a1a;color:#ef5350}
+.amount{font-weight:700;color:#f0f0f0;font-size:15px}
+.actions{display:flex;gap:8px;justify-content:flex-end}
+.btn-sm{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #2a2a2a;background:#1a1a1a;color:#ccc;text-decoration:none;display:inline-block}
+.btn-sm:hover{background:#222;color:#fff}
+.btn-sm-danger{border-color:#3a1a1a;color:#ef5350}
+.btn-sm-danger:hover{background:#3a1a1a}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="back">← Dashboard</a>
+    <h1>🧾 Invoices</h1>
+  </div>
+  <a href="/invoices/new" class="btn-new">+ New Invoice</a>
+</div>
+<div class="container">
+  <div id="list-wrap"></div>
+</div>
+<script>
+async function load() {
+  const res = await fetch('/api/invoices');
+  const invs = await res.json();
+  const wrap = document.getElementById('list-wrap');
+  if (!invs.length) {
+    wrap.innerHTML = `<div class="empty"><div class="empty-icon">🧾</div><p>No invoices yet.</p><br><a href="/invoices/new" class="btn-new">Create your first invoice</a></div>`;
+    return;
+  }
+  const rows = invs.map(inv => {
+    const total = calcTotal(inv);
+    const status = inv.status || 'draft';
+    const badgeClass = {draft:'badge-draft',sent:'badge-sent',paid:'badge-paid',overdue:'badge-overdue'}[status] || 'badge-draft';
+    return `<tr>
+      <td>
+        <div class="inv-num">${inv.invoice_number || inv.id}</div>
+        <div class="inv-company">${inv.bill_to?.company || inv.bill_to?.contact || '—'}</div>
+      </td>
+      <td style="font-size:13px;color:#888">${fmtDate(inv.date)}</td>
+      <td style="font-size:13px;color:#888">${fmtDate(inv.due_date)}</td>
+      <td><span class="badge ${badgeClass}">${status.toUpperCase()}</span></td>
+      <td class="amount">$${total.toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td class="actions">
+        <a href="/invoices/${inv.id}/edit" class="btn-sm">Edit</a>
+        <button class="btn-sm btn-sm-danger" onclick="del('${inv.id}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="table"><thead><tr>
+    <th>INVOICE</th><th>DATE</th><th>DUE</th><th>STATUS</th><th>TOTAL</th><th></th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function calcTotal(inv) {
+  const items = inv.line_items || [];
+  const sub = items.reduce((s,i) => s + (parseFloat(i.total)||0), 0);
+  const disc = parseFloat(inv.discount)||0;
+  const gstRate = parseFloat(inv.gst_rate)||0;
+  const afterDisc = sub - disc;
+  const gst = afterDisc * gstRate / 100;
+  return afterDisc + gst;
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  try { return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}); }
+  catch { return d; }
+}
+
+async function del(id) {
+  if (!confirm('Delete this invoice?')) return;
+  await fetch(`/api/invoices/${id}`, {method:'DELETE'});
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
