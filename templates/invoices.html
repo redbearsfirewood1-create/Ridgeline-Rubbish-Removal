@@ -6,8 +6,10 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d0d0d;color:#f0f0f0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
-.topbar{background:#111;border-bottom:1px solid #1e3a1e;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.topbar{background:#111;border-bottom:1px solid #1e3a1e;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .topbar-left{display:flex;align-items:center;gap:14px}
+.topbar-logo{display:flex;align-items:center;flex-shrink:0;line-height:0;}
+.topbar-logo img{height:44px;object-fit:contain;}
 .back{color:#3d8b3d;text-decoration:none;font-size:14px;font-weight:600}
 .back:hover{color:#4caf50}
 h1{font-size:18px;font-weight:800}
@@ -39,6 +41,7 @@ h1{font-size:18px;font-weight:800}
 {% include '_loader.html' %}
 <div class="topbar">
   <div class="topbar-left">
+    <a href="/home" class="topbar-logo"><img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'"></a>
     <a href="/home" class="back">← Dashboard</a>
     <h1>🧾 Invoices</h1>
   </div>

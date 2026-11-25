@@ -110,7 +110,14 @@ If you don't have a key yet:
 
 Any time you make changes:
 1. Edit the files locally
-2. Commit and push to GitHub
-3. Render auto-deploys within 2–3 minutes
+2. **Double-click `RUN_TESTS.bat`** — it must end with 🟢 SAFE TO DEPLOY
+3. Commit and push to GitHub
+4. GitHub runs the same tests automatically (Actions tab → "Tests")
+5. Render deploys **only if those tests pass** (Settings → Auto-Deploy → "After CI Checks Pass")
+
+If the tests fail, nothing goes live — your current site keeps running untouched.
+Tests use a throwaway data folder, so they never touch real clients, invoices or photos.
+
+When you add a new feature, add a test for it in `tests/` so it stays protected.
 
 Your data (quotes, expenses, photos) is on the persistent disk and is never affected by redeploys.

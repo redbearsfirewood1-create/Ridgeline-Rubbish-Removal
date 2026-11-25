@@ -13,7 +13,8 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0f0f0;}
 .topbar{background:#111;border-bottom:1px solid #222;padding:0 18px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
-.topbar img{height:30px;object-fit:contain;}
+.topbar img{height:44px;object-fit:contain;}
+.topbar-logo{display:flex;align-items:center;flex-shrink:0;line-height:0;}
 .topbar-name{font-size:16px;font-weight:900;color:#3d8b3d;flex:1;}
 .btn-back{font-size:12px;color:#666;text-decoration:none;}
 .btn-back:hover{color:#aaa;}
@@ -225,7 +226,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 {% include '_loader.html' %}
 
 <div class="topbar">
-  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <a href="/home" class="topbar-logo"><img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'"></a>
   <div class="topbar-name">Employees & Sites</div>
   <a href="/checklists" class="btn-back">← Checklists</a>
 </div>
@@ -365,14 +366,31 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
         </div>
         <div>
           <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Site Type</div>
-          <select id="newSiteType" onchange="toggleNewKitchenField()" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+          <select id="newSiteType" onchange="onNewSiteTypeChange()" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
             <option value="restaurant">🍔 Restaurant</option>
             <option value="office">🏢 Office</option>
             <option value="construction">🏗️ Construction</option>
+            <option value="residential">🏠 Residential</option>
           </select>
         </div>
       </div>
-      <div id="newKitchenRow" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <!-- Frequency: recurring vs once-off -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Frequency</div>
+          <select id="newSiteFrequency" onchange="onNewFrequencyChange()" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+            <option value="recurring">🔁 Recurring</option>
+            <option value="adhoc">⚡ Adhoc (once-off)</option>
+          </select>
+        </div>
+        <div id="newAdhocDateWrap" style="display:none;">
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Job Date</div>
+          <input id="newAdhocDate" type="date"
+                 style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;color-scheme:dark;">
+        </div>
+      </div>
+      <!-- Dynamic fields — Restaurant -->
+      <div id="newFields-restaurant" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
           <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
           <select id="newSiteKitchen" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
@@ -381,6 +399,73 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
           </select>
         </div>
         <div></div>
+      </div>
+      <!-- Dynamic fields — Office -->
+      <div id="newFields-office" style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Number of Rooms</div>
+          <input id="newOfficeRooms" type="number" min="1" placeholder="e.g. 10"
+                 style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
+          <select id="newOfficeKitchen" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+            <option value="false">No Kitchen / Kitchenette</option>
+            <option value="true">Has Full Kitchen</option>
+          </select>
+        </div>
+      </div>
+      <!-- Dynamic fields — Construction -->
+      <div id="newFields-construction" style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Waste Type</div>
+          <input id="newWasteType" placeholder="e.g. General, Hazardous, Green Waste"
+                 style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Skip Bin Size</div>
+          <select id="newSkipBinSize" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+            <option value="">— Select size —</option>
+            <option value="2m3">2 m³ (Mini)</option>
+            <option value="3m3">3 m³ (Small)</option>
+            <option value="4m3">4 m³</option>
+            <option value="6m3">6 m³ (Medium)</option>
+            <option value="8m3">8 m³</option>
+            <option value="10m3">10 m³ (Large)</option>
+            <option value="12m3">12 m³</option>
+            <option value="15m3">15 m³ (Extra Large)</option>
+            <option value="30m3">30 m³ (Bulky)</option>
+          </select>
+        </div>
+      </div>
+      <!-- Dynamic fields — Residential -->
+      <div id="newFields-residential" style="display:none;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Bedrooms</div>
+          <input id="newResidentialRooms" type="number" min="1" max="10" placeholder="e.g. 3"
+                 style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Bathrooms</div>
+          <input id="newResidentialBaths" type="number" min="1" max="10" placeholder="e.g. 2"
+                 style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Property Type</div>
+          <select id="newPropertyType" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+            <option value="House">🏠 House</option>
+            <option value="Apartment">🏢 Apartment</option>
+            <option value="Townhouse">🏘️ Townhouse</option>
+            <option value="Unit">Unit</option>
+          </select>
+        </div>
+        <div>
+          <div class="input-label" style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
+          <select id="newResidentialKitchen" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:14px;padding:11px 12px;border-radius:10px;width:100%;outline:none;appearance:none;">
+            <option value="true">Has Kitchen</option>
+            <option value="false">No Kitchen</option>
+          </select>
+        </div>
       </div>
       <div style="margin-bottom:14px;">
         <div style="font-size:11px;color:#888;margin-bottom:6px;">🖼️ Site Logo <span style="color:#555;">(optional)</span></div>
@@ -1024,12 +1109,13 @@ function renderSites() {
 
     card.innerHTML = `
       <div class="site-card-header">
-        <div class="site-icon">${site.logo_url ? `<img src="${site.logo_url}" style="width:36px;height:36px;object-fit:contain;border-radius:6px;">` : (site.site_type==='office'?'🏢':site.site_type==='construction'?'🏗️':'🍔')}</div>
+        <div class="site-icon">${site.logo_url ? `<img src="${site.logo_url}" style="width:36px;height:36px;object-fit:contain;border-radius:6px;">` : (site.site_type==='office'?'🏢':site.site_type==='construction'?'🏗️':site.site_type==='residential'?'🏠':'🍔')}</div>
         <div class="site-info">
           <strong>${site.name}</strong>
           <span style="display:flex;align-items:center;gap:6px;">
             ${site.id}
-            <span style="font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;background:${site.site_type==='office'?'#1a2e44':site.site_type==='construction'?'#2e1e0f':'#1e2e1a'};color:${site.site_type==='office'?'#64b5f6':site.site_type==='construction'?'#ffb74d':'#81c784'};">${site.site_type==='office'?'Office':site.site_type==='construction'?'Construction':'Restaurant'}</span>
+            <span style="font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;background:${site.site_type==='office'?'#1a2e44':site.site_type==='construction'?'#2e1e0f':site.site_type==='residential'?'#1e2a3a':'#1e2e1a'};color:${site.site_type==='office'?'#64b5f6':site.site_type==='construction'?'#ffb74d':site.site_type==='residential'?'#80cbc4':'#81c784'};">${site.site_type==='office'?'Office':site.site_type==='construction'?'Construction':site.site_type==='residential'?'Residential':'Restaurant'}</span>
+            ${site.is_adhoc ? `<span style="font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;background:#2a1f0a;color:#ffb74d;">⚡ ADHOC ${site.adhoc_date||''}</span>` : ''}
           </span>
         </div>
         ${!site.is_builtin ? `<button onclick="deleteSite('${site.id}')" style="margin-left:auto;background:#6b1515;border:none;color:#ff6b6b;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;">🗑 Delete</button>` : ''}
@@ -1045,13 +1131,36 @@ function renderSites() {
           <div style="font-size:11px;color:#888;margin-bottom:4px;">Site Type</div>
           <select id="siteType-${site.id}" onchange="updatePricingPanel('${site.id}')"
                   style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
-            <option value="restaurant" ${(site.site_type||'restaurant')==='restaurant'?'selected':''}>🍔 Restaurant</option>
-            <option value="office"     ${site.site_type==='office'?'selected':''}>🏢 Office</option>
+            <option value="restaurant"  ${(site.site_type||'restaurant')==='restaurant'?'selected':''}>🍔 Restaurant</option>
+            <option value="office"      ${site.site_type==='office'?'selected':''}>🏢 Office</option>
             <option value="construction" ${site.site_type==='construction'?'selected':''}>🏗️ Construction</option>
+            <option value="residential" ${site.site_type==='residential'?'selected':''}>🏠 Residential</option>
           </select>
         </div>
       </div>
+
+      <!-- Frequency -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Frequency</div>
+          <select id="siteFrequency-${site.id}" onchange="onSiteFrequencyChange('${site.id}')"
+                  style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
+            <option value="recurring" ${!site.is_adhoc?'selected':''}>🔁 Recurring</option>
+            <option value="adhoc"     ${site.is_adhoc?'selected':''}>⚡ Adhoc (once-off)</option>
+          </select>
+        </div>
+        <div id="siteAdhocDateWrap-${site.id}" style="display:${site.is_adhoc?'block':'none'};">
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Job Date</div>
+          <input id="siteAdhocDate-${site.id}" type="date" value="${site.adhoc_date||''}"
+                 style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;color-scheme:dark;">
+        </div>
+      </div>
+      <div id="siteAdhocNote-${site.id}" style="display:${site.is_adhoc?'block':'none'};font-size:11px;color:#ffb74d;background:#2a1f0a;border:1px solid #4a3510;border-radius:8px;padding:8px 10px;margin-bottom:10px;">
+        ⚡ Once-off job: shows for staff only on the job date. Enter the total job price as the client rate and the cleaner's pay for the job — it won't count toward weekly contracted revenue.
+      </div>
+
+      <!-- Kitchen row (restaurant / office / residential only) -->
+      <div id="siteKitchenRow-${site.id}" style="display:${site.site_type==='construction'?'none':'grid'};grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
           <div style="font-size:11px;color:#888;margin-bottom:4px;">Kitchen?</div>
           <select id="siteKitchen-${site.id}" onchange="updateKitchenPricingCols('${site.id}')"
@@ -1061,6 +1170,52 @@ function renderSites() {
           </select>
         </div>
         <div></div>
+      </div>
+
+      <!-- Office extra meta -->
+      <div id="siteMeta-office-${site.id}" style="display:${site.site_type==='office'?'grid':'none'};grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Number of Rooms</div>
+          <input id="siteOfficeRooms-${site.id}" type="number" min="1" value="${site.num_rooms||''}"
+                 placeholder="e.g. 10" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+        </div>
+        <div></div>
+      </div>
+
+      <!-- Construction extra meta -->
+      <div id="siteMeta-construction-${site.id}" style="display:${site.site_type==='construction'?'grid':'none'};grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Waste Type</div>
+          <input id="siteWasteType-${site.id}" value="${site.waste_type||''}"
+                 placeholder="e.g. General, Hazardous" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Skip Bin Size</div>
+          <select id="siteSkipBin-${site.id}" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
+            <option value="">— Select —</option>
+            ${['2m3','3m3','4m3','6m3','8m3','10m3','12m3','15m3','30m3'].map(s=>`<option value="${s}" ${site.skip_bin_size===s?'selected':''}>${s.replace('m3',' m³')}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <!-- Residential extra meta -->
+      <div id="siteMeta-residential-${site.id}" style="display:${site.site_type==='residential'?'grid':'none'};grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Bedrooms</div>
+          <input id="siteResRooms-${site.id}" type="number" min="1" max="10" value="${site.num_rooms||''}"
+                 placeholder="e.g. 3" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Bathrooms</div>
+          <input id="siteResBaths-${site.id}" type="number" min="1" max="10" value="${site.num_bathrooms||''}"
+                 placeholder="e.g. 2" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;">Property Type</div>
+          <select id="sitePropType-${site.id}" style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;appearance:none;">
+            ${['House','Apartment','Townhouse','Unit'].map(pt=>`<option value="${pt}" ${site.property_type===pt?'selected':''}>${pt==='House'?'🏠':pt==='Apartment'?'🏢':pt==='Townhouse'?'🏘️':''}  ${pt}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div>
@@ -1167,7 +1322,7 @@ function renderSites() {
                      style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
             </div>
             <div>
-              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Rate/night ($)</div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Rate/visit ($)</div>
               <input id="priceConstructionCleaner-${site.id}" type="number" min="0" step="0.01"
                      value="${(site.pricing&&site.pricing.construction_cleaner_rate)||''}" placeholder="e.g. 90"
                      style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
@@ -1176,6 +1331,30 @@ function renderSites() {
               <div style="font-size:11px;color:#888;margin-bottom:4px;">Days/Week</div>
               <input id="priceConstructionDays-${site.id}" type="number" min="1" max="7"
                      value="${(site.pricing&&site.pricing.days_per_week)||5}"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Residential -->
+        <div id="pricingResidential-${site.id}" style="display:${site.site_type==='residential'?'':'none'}">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Client Rate/job ($)</div>
+              <input id="priceResidentialWeekly-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.residential_weekly)||''}" placeholder="e.g. 350"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Cleaner Pay/job ($)</div>
+              <input id="priceResidentialCleaner-${site.id}" type="number" min="0" step="0.01"
+                     value="${(site.pricing&&site.pricing.residential_cleaner_rate)||''}" placeholder="e.g. 200"
+                     style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px;">Jobs/Week</div>
+              <input id="priceResidentialDays-${site.id}" type="number" min="1" max="7"
+                     value="${(site.pricing&&site.pricing.days_per_week)||1}"
                      style="background:#111;border:1px solid #333;color:#f0f0f0;font-size:13px;padding:9px 10px;border-radius:8px;width:100%;outline:none;">
             </div>
           </div>
@@ -1313,9 +1492,28 @@ async function saveSite(siteId) {
     pricing.construction_weekly       = pf(`priceConstructionWeekly-${siteId}`);
     pricing.construction_cleaner_rate = pf(`priceConstructionCleaner-${siteId}`);
     pricing.days_per_week             = pi(`priceConstructionDays-${siteId}`, 5);
+  } else if (siteTypeVal === 'residential') {
+    pricing.residential_weekly       = pf(`priceResidentialWeekly-${siteId}`);
+    pricing.residential_cleaner_rate = pf(`priceResidentialCleaner-${siteId}`);
+    pricing.days_per_week            = pi(`priceResidentialDays-${siteId}`, 1);
   }
 
+  // Extra meta fields — read only the fields active for this type
+  const num_rooms = siteTypeVal === 'office'       ? (document.getElementById(`siteOfficeRooms-${siteId}`)?.value || '')
+                  : siteTypeVal === 'residential'  ? (document.getElementById(`siteResRooms-${siteId}`)?.value || '')
+                  : '';
+  const property_type = siteTypeVal === 'residential' ? (document.getElementById(`sitePropType-${siteId}`)?.value || '') : '';
+  const num_bathrooms = siteTypeVal === 'residential' ? (document.getElementById(`siteResBaths-${siteId}`)?.value || '') : '';
+  const waste_type    = siteTypeVal === 'construction' ? (document.getElementById(`siteWasteType-${siteId}`)?.value?.trim() || '') : '';
+  const skip_bin_size = siteTypeVal === 'construction' ? (document.getElementById(`siteSkipBin-${siteId}`)?.value || '') : '';
+
+  const is_adhoc   = document.getElementById(`siteFrequency-${siteId}`)?.value === 'adhoc';
+  const adhoc_date = is_adhoc ? (document.getElementById(`siteAdhocDate-${siteId}`)?.value || '') : '';
+  if (is_adhoc && !adhoc_date) { alert('Please pick the job date for this once-off site'); return; }
+
   const payload = {
+    is_adhoc,
+    adhoc_date,
     assigned_days: days,
     assigned_employees: assignedEmps,
     enabled: true,
@@ -1325,6 +1523,11 @@ async function saveSite(siteId) {
     start_time:  startEl   ? startEl.value               : undefined,
     site_type:   typeEl    ? typeEl.value                : undefined,
     pricing,
+    num_rooms,
+    num_bathrooms,
+    property_type,
+    waste_type,
+    skip_bin_size,
   };
   if (!payload.name)        delete payload.name;
   if (payload.has_kitchen === undefined) delete payload.has_kitchen;
@@ -1333,10 +1536,15 @@ async function saveSite(siteId) {
   if (payload.site_type === undefined)   delete payload.site_type;
 
   try {
-    await fetch(`/api/sites/${siteId}`, {
+    const r = await fetch(`/api/sites/${siteId}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
     });
+    if (!r.ok) {
+      let msg = 'Error saving site';
+      try { msg = (await r.json()).error || msg; } catch(_) {}
+      alert(msg); return;
+    }
     const statusEl = document.getElementById(`save-status-${siteId}`);
     statusEl.style.opacity='1';
     setTimeout(()=>statusEl.style.opacity='0', 2000);
@@ -1345,9 +1553,23 @@ async function saveSite(siteId) {
   } catch(e) { alert('Error saving site config'); }
 }
 
-function toggleNewKitchenField() {
+function onNewFrequencyChange() {
+  const adhoc = document.getElementById('newSiteFrequency').value === 'adhoc';
+  document.getElementById('newAdhocDateWrap').style.display = adhoc ? 'block' : 'none';
+}
+
+function onSiteFrequencyChange(siteId) {
+  const adhoc = document.getElementById(`siteFrequency-${siteId}`).value === 'adhoc';
+  document.getElementById(`siteAdhocDateWrap-${siteId}`).style.display = adhoc ? 'block' : 'none';
+  document.getElementById(`siteAdhocNote-${siteId}`).style.display     = adhoc ? 'block' : 'none';
+}
+
+function onNewSiteTypeChange() {
   const type = document.getElementById('newSiteType').value;
-  document.getElementById('newKitchenRow').style.display = (type === 'restaurant') ? 'grid' : 'none';
+  ['restaurant', 'office', 'construction', 'residential'].forEach(t => {
+    const el = document.getElementById(`newFields-${t}`);
+    if (el) el.style.display = t === type ? 'grid' : 'none';
+  });
 }
 
 function updatePricingPanel(siteId) {
@@ -1355,6 +1577,17 @@ function updatePricingPanel(siteId) {
   document.getElementById(`pricingRestaurant-${siteId}`).style.display   = type === 'restaurant'   ? '' : 'none';
   document.getElementById(`pricingOffice-${siteId}`).style.display        = type === 'office'       ? '' : 'none';
   document.getElementById(`pricingConstruction-${siteId}`).style.display  = type === 'construction' ? '' : 'none';
+  document.getElementById(`pricingResidential-${siteId}`).style.display   = type === 'residential'  ? '' : 'none';
+  // Kitchen row: hide for construction only
+  const kitchenRow = document.getElementById(`siteKitchenRow-${siteId}`);
+  if (kitchenRow) kitchenRow.style.display = type === 'construction' ? 'none' : 'grid';
+  // Per-type meta rows
+  const metaOffice       = document.getElementById(`siteMeta-office-${siteId}`);
+  const metaConstruction = document.getElementById(`siteMeta-construction-${siteId}`);
+  const metaResidential  = document.getElementById(`siteMeta-residential-${siteId}`);
+  if (metaOffice)       metaOffice.style.display       = type === 'office'       ? 'grid' : 'none';
+  if (metaConstruction) metaConstruction.style.display = type === 'construction' ? 'grid' : 'none';
+  if (metaResidential)  metaResidential.style.display  = type === 'residential'  ? 'grid' : 'none';
 }
 
 function updateKitchenPricingCols(siteId) {
@@ -1367,14 +1600,35 @@ function updateKitchenPricingCols(siteId) {
 }
 
 async function addSite() {
-  const name = document.getElementById('newSiteName').value.trim();
+  const name      = document.getElementById('newSiteName').value.trim();
   const site_type = document.getElementById('newSiteType').value;
-  const has_kitchen = site_type === 'restaurant' ? document.getElementById('newSiteKitchen').value === 'true' : false;
   if (!name) { alert('Please enter a site name'); return; }
+
+  let has_kitchen = false, num_rooms = '', num_bathrooms = '', property_type = '', waste_type = '', skip_bin_size = '';
+  if (site_type === 'restaurant') {
+    has_kitchen = document.getElementById('newSiteKitchen').value === 'true';
+  } else if (site_type === 'office') {
+    num_rooms   = document.getElementById('newOfficeRooms').value;
+    has_kitchen = document.getElementById('newOfficeKitchen').value === 'true';
+  } else if (site_type === 'construction') {
+    waste_type    = document.getElementById('newWasteType').value.trim();
+    skip_bin_size = document.getElementById('newSkipBinSize').value;
+  } else if (site_type === 'residential') {
+    num_rooms     = document.getElementById('newResidentialRooms').value;
+    num_bathrooms = document.getElementById('newResidentialBaths').value;
+    property_type = document.getElementById('newPropertyType').value;
+    has_kitchen   = document.getElementById('newResidentialKitchen').value === 'true';
+  }
+
+  const is_adhoc   = document.getElementById('newSiteFrequency').value === 'adhoc';
+  const adhoc_date = is_adhoc ? document.getElementById('newAdhocDate').value : '';
+  if (is_adhoc && !adhoc_date) { alert('Please pick the job date for this once-off site'); return; }
+
   try {
     const r = await fetch('/api/sites', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name, has_kitchen, site_type})
+      body: JSON.stringify({name, has_kitchen, site_type, num_rooms, num_bathrooms, property_type,
+                            waste_type, skip_bin_size, is_adhoc, adhoc_date})
     });
     if (!r.ok) { const d = await r.json(); alert(d.error || 'Error creating site'); return; }
     const newSite = await r.json();
@@ -1387,6 +1641,17 @@ async function addSite() {
     // Reset form
     document.getElementById('newSiteName').value = '';
     document.getElementById('newSiteKitchen').value = 'false';
+    document.getElementById('newOfficeRooms').value = '';
+    document.getElementById('newOfficeKitchen').value = 'false';
+    document.getElementById('newWasteType').value = '';
+    document.getElementById('newSkipBinSize').value = '';
+    document.getElementById('newResidentialRooms').value = '';
+    document.getElementById('newResidentialBaths').value = '';
+    document.getElementById('newSiteFrequency').value = 'recurring';
+    document.getElementById('newAdhocDate').value = '';
+    onNewFrequencyChange();
+    document.getElementById('newPropertyType').value = 'House';
+    document.getElementById('newResidentialKitchen').value = 'true';
     document.getElementById('newSiteLogoFile').value = '';
     document.getElementById('newSiteLogoPreview').style.display = 'none';
     await loadSites();

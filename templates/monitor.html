@@ -16,7 +16,8 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
   padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;
   position:sticky;top:0;z-index:200;flex-shrink:0;
 }
-.topbar img{height:26px;object-fit:contain;}
+.topbar img{height:40px;object-fit:contain;}
+.topbar-logo{display:flex;align-items:center;flex-shrink:0;line-height:0;}
 .topbar-title{font-size:14px;font-weight:900;color:#3d8b3d;flex:1;}
 .topbar-clock{font-size:22px;font-weight:900;color:#f0f0f0;letter-spacing:2px;font-variant-numeric:tabular-nums;}
 .topbar-date{font-size:11px;color:#555;margin-left:6px;}
@@ -220,7 +221,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 
 <!-- Top bar -->
 <div class="topbar">
-  <img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'">
+  <a href="/home" class="topbar-logo"><img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'"></a>
   <div class="topbar-title">📡 Live Monitor</div>
   <div>
     <span class="topbar-clock" id="clock">--:--</span>

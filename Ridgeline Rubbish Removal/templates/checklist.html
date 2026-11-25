@@ -77,6 +77,18 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 .site-bubble-addr{font-size:12px;color:#666;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .site-bubble-time{display:inline-block;margin-top:5px;font-size:12px;font-weight:700;color:#3d8b3d;background:#1a2e1a;border:1px solid #2d5c2d;border-radius:6px;padding:2px 8px;}
 .site-bubble-arrow{flex-shrink:0;color:#3d8b3d;font-size:22px;}
+.site-row{display:flex;gap:8px;align-items:stretch;}
+.site-row .site-bubble{flex:1;min-width:0;}
+.btn-nav-site{flex-shrink:0;width:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:#16263a;border:2px solid #2f5f8f;border-radius:18px;color:#64b5f6;font-size:12px;font-weight:800;
+  text-decoration:none;-webkit-tap-highlight-color:transparent;}
+.btn-nav-site span{font-size:24px;line-height:1;}
+.btn-nav-site:active{background:#1d3550;}
+.btn-nav-site.disabled{opacity:.35;pointer-events:none;}
+.adhoc-tag{display:inline-block;margin-top:5px;margin-left:4px;font-size:11px;font-weight:800;color:#ffb74d;background:#2a1f0a;border:1px solid #4a3510;border-radius:6px;padding:2px 7px;}
+.btn-back-sites{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid #333;color:#aaa;
+  font-size:14px;font-weight:700;padding:10px 14px;border-radius:10px;margin-bottom:14px;cursor:pointer;}
+.btn-back-sites:active{background:#1a1a1a;color:#fff;}
 .no-sites{text-align:center;padding:40px 20px;color:#444;}
 .no-sites-icon{font-size:40px;margin-bottom:12px;}
 
@@ -337,6 +349,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 <!-- Phase 3: Arrival Photo -->
 <div class="phase" id="phaseArrival">
   <div class="arrival-wrap">
+    <button class="btn-back-sites" onclick="backToSites()">← Back to sites</button>
     <div class="arrival-title">📸 Arrival Check-In</div>
     <div class="arrival-sub">Take a photo to confirm your arrival time and location</div>
     <div class="arrival-site">
@@ -367,6 +380,7 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 <!-- Phase 4: Checklist -->
 <div class="phase" id="phaseChecklist">
   <div class="checklist-wrap">
+    <button class="btn-back-sites" onclick="backToSites()">← Wrong site? Back to sites</button>
     <div class="cl-header">
       <div class="cl-site-name" id="clSiteName">—</div>
       <div class="cl-meta" id="clMeta">—</div>
@@ -583,15 +597,23 @@ function renderTodaySites(sites) {
     const iconHtml = logoUrl
       ? `<img src="${logoUrl}" alt="${logoAlt}" style="width:44px;height:44px;object-fit:contain;border-radius:8px;flex-shrink:0;">`
       : `<div class="site-bubble-icon">📋</div>`;
+    const navHtml = s.address
+      ? `<a class="btn-nav-site" href="${mapsDirectionsUrl(s.address)}" target="_blank" rel="noopener"
+            onclick="event.stopPropagation()"><span>🧭</span>Navigate</a>`
+      : `<div class="btn-nav-site disabled" title="No address set for this site"><span>🧭</span>No address</div>`;
     return `
-    <div class="site-bubble" data-site-idx="${i}" onclick="startSite(${i})">
-      ${iconHtml}
-      <div class="site-bubble-body">
-        <div class="site-bubble-name">${s.name}</div>
-        ${s.address ? `<div class="site-bubble-addr">📍 ${s.address}</div>` : ''}
-        ${s.start_time ? `<span class="site-bubble-time">⏰ ${s.start_time}</span>` : ''}
+    <div class="site-row">
+      <div class="site-bubble" data-site-idx="${i}" onclick="startSite(${i})">
+        ${iconHtml}
+        <div class="site-bubble-body">
+          <div class="site-bubble-name">${s.name}</div>
+          ${s.address ? `<div class="site-bubble-addr">📍 ${s.address}</div>` : ''}
+          ${s.start_time ? `<span class="site-bubble-time">⏰ ${s.start_time}</span>` : ''}
+          ${s.is_adhoc ? `<span class="adhoc-tag">⚡ Once-off</span>` : ''}
+        </div>
+        <div class="site-bubble-arrow">›</div>
       </div>
-      <div class="site-bubble-arrow">›</div>
+      ${navHtml}
     </div>`;
   }).join('');
 }
@@ -1097,6 +1119,22 @@ function doSignOut() {
   document.getElementById('topbarName').textContent = 'Ridgeline Cleaning';
   _resetArrivalUI();
   showPhase('phaseLogin');
+}
+
+// Google Maps directions from the cleaner's current location (opens the Maps app on phones)
+function mapsDirectionsUrl(address) {
+  return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(address);
+}
+
+// Staff picked the wrong site — let them back out safely
+function backToSites() {
+  const onChecklist = document.getElementById('phaseChecklist').classList.contains('active');
+  const msg = onChecklist
+    ? 'Go back to your site list?\n\nAnything ticked on this checklist will be cleared.'
+    : (arrivalSaved ? 'You already checked in here. Go back to your site list anyway?' : null);
+  if (msg && !confirm(msg)) return;
+  arrivalSaved = false;
+  goToSites();
 }
 
 function goToSites() {

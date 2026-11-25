@@ -112,6 +112,24 @@ if os.path.exists(RENDER):
 else:
     fail("render.yaml not found")
 
+# 7 · Full automated test suite (runs against a throwaway data folder — real data untouched)
+print("\n[7] Automated tests")
+import subprocess, shutil
+try:
+    import pytest  # noqa: F401
+    if not shutil.which('node'):
+        warn("Node.js not installed — page JavaScript syntax checks will be skipped (they still run on GitHub)")
+    r = subprocess.run([sys.executable, '-m', 'pytest', 'tests', '-q', '-p', 'no:cacheprovider'],
+                       cwd=ROOT, capture_output=True, text=True)
+    summary = (r.stdout.strip().splitlines() or ['no output'])[-1]
+    if r.returncode == 0:
+        ok(f"All tests passed — {summary}")
+    else:
+        print(r.stdout[-4000:])
+        fail(f"Tests failed — {summary}")
+except ImportError:
+    fail("pytest not installed — run:  pip install -r requirements-dev.txt")
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 print("\n────────────────────────────────────────────────────────────")
 if errors:

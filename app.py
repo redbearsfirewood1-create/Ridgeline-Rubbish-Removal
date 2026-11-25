@@ -60,7 +60,8 @@ SMTP_USER    = os.environ.get('SMTP_USER', '')
 SMTP_PASS    = os.environ.get('SMTP_PASS', '')   # Gmail App Password
 BUSINESS_PHONE = os.environ.get('BUSINESS_PHONE', '')
 
-DATA_DIR     = os.path.join(os.path.dirname(__file__), 'data')
+# RIDGELINE_DATA_DIR lets the test suite run against a throwaway folder so real data is never touched.
+DATA_DIR     = os.environ.get('RIDGELINE_DATA_DIR') or os.path.join(os.path.dirname(__file__), 'data')
 PHOTOS_DIR   = os.path.join(DATA_DIR, 'photos')
 QUOTES_FILE   = os.path.join(DATA_DIR, 'quotes.json')
 INVOICES_FILE = os.path.join(DATA_DIR, 'invoices.json')
@@ -107,10 +108,55 @@ def save_json(path, data):
             except (AttributeError, OSError): pass   # Windows dev env fallback
             json.dump(data, f, indent=2)
         os.replace(tmp, path)
+    # Any write to site settings must invalidate the in-memory template cache immediately
+    if os.path.abspath(path) == os.path.abspath(os.path.join(DATA_DIR, 'sites_config.json')):
+        global _templates_cache
+        _templates_cache = None
 
 def next_quote_number(quotes):
     nums = [int(q.get('quote_number','Q0').replace('Q','')) for q in quotes if q.get('quote_number','').startswith('Q')]
     return 'Q' + str(max(nums, default=0) + 1).zfill(4)
+
+def _num(v):
+    """Parse a price/amount safely: '', None, 'abc' -> 0.0. Never raises."""
+    try:
+        return float(str(v).replace('$', '').replace(',', '').strip()) if v not in (None, '') else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+def site_weekly_figures(sc, t=None):
+    """
+    The ONE place site pricing is calculated. Used by the dashboard, revenue summary
+    and invoice auto-fill so they can never disagree.
+    Returns (weekly_revenue, weekly_labour, days_per_week).
+    """
+    t       = t or {}
+    pricing = sc.get('pricing') or {}
+    stype   = sc.get('site_type', 'restaurant')
+    has_k   = sc.get('has_kitchen', t.get('has_kitchen', False))
+    try:    days = int(float(pricing.get('days_per_week') or 0))
+    except (TypeError, ValueError): days = 0
+    default_days = 1 if stype == 'residential' else 5
+    days = days if 1 <= days <= 7 else default_days
+    if sc.get('is_adhoc'):
+        days = 1          # once-off: the client rate is the whole job, cleaner paid once
+    if stype == 'restaurant':
+        rev = _num(pricing.get('dining_weekly')) + (_num(pricing.get('kitchen_weekly')) if has_k else 0)
+        lab = (_num(pricing.get('dining_cleaner_rate')) +
+               (_num(pricing.get('kitchen_cleaner_rate')) if has_k else 0)) * days
+    elif stype in ('office', 'construction', 'residential'):
+        rev = _num(pricing.get(f'{stype}_weekly'))
+        lab = _num(pricing.get(f'{stype}_cleaner_rate')) * days
+    else:
+        rev = lab = 0.0
+    return rev, lab, days
+
+def _clean_date(v):
+    """Return 'YYYY-MM-DD' if v is a real date, else ''."""
+    try:
+        return datetime.strptime(str(v or '').strip(), '%Y-%m-%d').strftime('%Y-%m-%d')
+    except ValueError:
+        return ''
 
 def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in ALLOWED_EXT
@@ -522,7 +568,12 @@ def api_get_expenses():
 @login_required
 def api_create_expense():
     ensure_dirs()
-    data = request.get_json()
+    data = request.get_json() or {}
+    try:
+        amount = float(str(data.get('amount', '')).replace('$', '').replace(',', '').strip())
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Amount must be a number'}), 400
+    data['amount'] = amount
     expenses = load_json(EXPENSES_FILE)
     exp = {
         'id':          str(uuid.uuid4()),
@@ -737,35 +788,22 @@ def api_revenue_summary():
 
     for sid, t in templates.items():
         sc       = scfg.get(sid, {})
-        pricing  = sc.get('pricing', {})
         stype    = sc.get('site_type', 'restaurant')
         has_k    = sc.get('has_kitchen', t.get('has_kitchen', False))
-        days     = max(1, int(pricing.get('days_per_week') or 5))
-
-        if stype == 'restaurant':
-            w_rev = float(pricing.get('dining_weekly') or 0)
-            if has_k: w_rev += float(pricing.get('kitchen_weekly') or 0)
-            nightly_lab  = float(pricing.get('dining_cleaner_rate') or 0)
-            if has_k: nightly_lab += float(pricing.get('kitchen_cleaner_rate') or 0)
-            w_lab = nightly_lab * days
-        elif stype == 'office':
-            w_rev = float(pricing.get('office_weekly') or 0)
-            w_lab = float(pricing.get('office_cleaner_rate') or 0) * days
-        elif stype == 'construction':
-            w_rev = float(pricing.get('construction_weekly') or 0)
-            w_lab = float(pricing.get('construction_cleaner_rate') or 0) * days
-        else:
-            w_rev = w_lab = 0.0
+        w_rev, w_lab, days = site_weekly_figures(sc, t)
+        is_adhoc = bool(sc.get('is_adhoc'))
 
         pv_rev = w_rev / days
         pv_lab = w_lab / days
 
-        weekly_contracted       += w_rev
-        weekly_labor_contracted += w_lab
+        # Adhoc (once-off) jobs are not recurring income: they only count once the clean is done
+        if not is_adhoc:
+            weekly_contracted       += w_rev
+            weekly_labor_contracted += w_lab
 
         entry = {
             'id': sid, 'name': sc.get('name', t['name']),
-            'site_type': stype, 'has_kitchen': has_k,
+            'site_type': stype, 'has_kitchen': has_k, 'is_adhoc': is_adhoc,
             'days_per_week': days,
             'weekly_revenue': round(w_rev, 2),
             'weekly_labor':   round(w_lab, 2),
@@ -899,6 +937,96 @@ PROOF_PHOTOS_KITCHEN = PROOF_PHOTOS_STANDARD + [
     {'key': 'equipment',  'label': 'Behind Equipment'},
 ]
 
+def _int_or(v, default):
+    try:    return max(0, min(20, int(v)))
+    except: return default
+
+def residential_proof_photos(t):
+    """Dynamic proof photo list for residential sites: 1 per bedroom, kitchen, oven, 1 per bathroom, living room."""
+    beds  = _int_or(t.get('num_rooms'), 1) or 1
+    baths = _int_or(t.get('num_bathrooms'), 1) or 1
+    photos = [{'key': f'bedroom_{i}', 'label': f'Bedroom {i}'} for i in range(1, beds + 1)]
+    if t.get('has_kitchen', True):
+        photos += [{'key': 'kitchen', 'label': 'Kitchen'},
+                   {'key': 'oven',    'label': 'Oven (inside)'}]
+    photos += [{'key': f'bathroom_{i}', 'label': f'Bathroom {i}'} for i in range(1, baths + 1)]
+    photos.append({'key': 'living_room', 'label': 'Living Room'})
+    return photos
+
+def proof_photos_for(t):
+    if t.get('site_type') == 'residential':
+        return residential_proof_photos(t)
+    return PROOF_PHOTOS_KITCHEN if t.get('has_kitchen') else PROOF_PHOTOS_STANDARD
+
+_RESIDENTIAL_EOL_SECTIONS = [
+    {'name': 'General / Throughout', 'tasks': [
+        'Remove all rubbish and personal belongings',
+        'Clean all walls — remove marks and scuffs',
+        'Wipe all skirting boards',
+        'Clean light switches and power points',
+        'Wipe door frames, handles and hinges',
+        'Clean all interior doors (both sides)',
+        'Dust and clean light fittings / ceiling fans (all blades)',
+        'Clean air conditioning filters and vents',
+        'Remove cobwebs from all ceilings and corners',
+        'Clean all windows — inside and outside (frames, tracks, sills)',
+        'Wipe fly screens',
+        'Vacuum and mop all hard floors',
+        'Steam clean / vacuum all carpeted areas',
+    ]},
+    {'name': 'Kitchen', 'tasks': [
+        'Clean oven inside (racks, walls, door glass) and outside',
+        'Clean rangehood / exhaust — including filter (degrease)',
+        'Clean cooktop / stovetop (all burners and surfaces)',
+        'Clean microwave inside and outside',
+        'Clean dishwasher (filter, door seals, interior)',
+        'Wipe down all cabinets — inside and outside, including handles',
+        'Clean benchtops and splashback tiles / surface',
+        'Clean sink and taps (descale if needed)',
+        'Wipe down refrigerator space / clean behind',
+    ]},
+    {'name': 'Bathrooms', 'tasks': [
+        'Scrub and descale toilet — bowl, seat, lid, behind and base',
+        'Clean shower / bath — tiles, grout, screen / curtain, taps, showerhead (descale)',
+        'Clean vanity, sink and taps',
+        'Polish mirrors',
+        'Clean exhaust fan cover',
+        'Wipe towel rails and toilet roll holder',
+        'Mop floor and clean grout lines',
+    ]},
+    {'name': 'Laundry', 'tasks': [
+        'Clean laundry tub and taps',
+        'Wipe cabinets inside and outside',
+        'Clean behind and under washing machine space',
+        'Mop floor and wipe walls',
+    ]},
+    {'name': 'Bedrooms (per room)', 'tasks': [
+        'Clean wardrobes — inside shelves, rails, drawers, inside doors and outside',
+        'Wipe window sills and tracks',
+        'Clean blinds / wipe curtain rails',
+        'Dust ceiling fan / light fitting',
+        'Vacuum carpet or mop hard floor',
+    ]},
+    {'name': 'Living / Dining Areas', 'tasks': [
+        'Wipe all surfaces, shelving and entertainment units',
+        'Clean windows and sliding door tracks',
+        'Vacuum carpet or mop hard floor',
+        'Wipe skirting boards and door frames',
+    ]},
+    {'name': 'Garage / Carport', 'tasks': [
+        'Remove all items and rubbish',
+        'Sweep and clean garage floor',
+        'Wipe down walls and benches',
+        'Clean garage door tracks',
+    ]},
+    {'name': 'Outdoor / Exterior', 'tasks': [
+        'Sweep patio / balcony / alfresco',
+        'Clean outdoor windows and fly screens',
+        'Remove rubbish from outdoor areas',
+        'Weed and tidy garden beds (if applicable)',
+    ]},
+]
+
 _BASE_TEMPLATES = {
     'cambridge': {
         'name': "Cambridge Gardens McDonald's",
@@ -968,14 +1096,36 @@ _DAY_NAMES = ['mon','tue','wed','thu','fri','sat','sun']  # weekday() 0=Mon…6=
 def _today_day_abbr():
     return _DAY_NAMES[sydney_now().weekday()]
 
+def _site_runs_on(sc, cfg, day_abbr, date_str):
+    """
+    Is this site scheduled on the given day?
+    Recurring sites follow their Active Days. Adhoc (once-off) sites appear ONLY on their job date.
+    """
+    if not cfg.get('enabled', True):
+        return False
+    if sc.get('is_adhoc'):
+        return bool(sc.get('adhoc_date')) and sc.get('adhoc_date') == date_str
+    return day_abbr in cfg.get('assigned_days', _DAY_NAMES)
+
+def _this_week_dates():
+    """{'mon': '2026-11-23', ...} for the current Sydney week (Mon–Sun)."""
+    from datetime import timedelta
+    today = sydney_now().date()
+    monday = today - timedelta(days=today.weekday())
+    return {d: (monday + timedelta(days=i)).isoformat() for i, d in enumerate(_DAY_NAMES)}
+
 _templates_cache = None
 _templates_mtime  = 0
 
 def get_templates():
     """Return all site templates, cached by file mtime so disk is only read when the file changes."""
     global _templates_cache, _templates_mtime
-    try:   mtime = os.path.getmtime(SITES_CONFIG_FILE)
-    except: mtime = 0
+    # Key on nanosecond mtime + size + inode so back-to-back saves are never missed
+    try:
+        st = os.stat(SITES_CONFIG_FILE)
+        mtime = (st.st_mtime_ns, st.st_size, st.st_ino)
+    except OSError:
+        mtime = 0
     if _templates_cache is not None and mtime == _templates_mtime:
         return _templates_cache
 
@@ -996,13 +1146,25 @@ def get_templates():
     # Add user-created sites (inherit tasks from matching base template)
     for sid, cfg in scfg.items():
         if sid not in _BASE_TEMPLATES:
-            src = _BASE_TEMPLATES['cambridge'] if cfg.get('has_kitchen') else _BASE_TEMPLATES['blaxland']
-            result[sid] = {
-                'name':           cfg['name'],
-                'has_kitchen':    cfg.get('has_kitchen', False),
-                'daily_sections': src['daily_sections'],
-                'weekly_items':   src['weekly_items'],
-            }
+            stype = cfg.get('site_type', 'restaurant')
+            if stype == 'residential':
+                result[sid] = {
+                    'name':           cfg['name'],
+                    'has_kitchen':    cfg.get('has_kitchen', True),
+                    'daily_sections': _RESIDENTIAL_EOL_SECTIONS,
+                    'weekly_items':   [],
+                    'site_type':      'residential',
+                    'num_rooms':      cfg.get('num_rooms', ''),
+                    'num_bathrooms':  cfg.get('num_bathrooms', ''),
+                }
+            else:
+                src = _BASE_TEMPLATES['cambridge'] if cfg.get('has_kitchen') else _BASE_TEMPLATES['blaxland']
+                result[sid] = {
+                    'name':           cfg['name'],
+                    'has_kitchen':    cfg.get('has_kitchen', False),
+                    'daily_sections': src['daily_sections'],
+                    'weekly_items':   src['weekly_items'],
+                }
 
     _templates_cache = result
     _templates_mtime  = mtime
@@ -1268,7 +1430,7 @@ def api_checklist_template(site_id):
         'daily_sections': t['daily_sections'],
         'weekly_today':   weekly_today,
         'day':            day,
-        'proof_photos':   PROOF_PHOTOS_KITCHEN if has_kitchen else PROOF_PHOTOS_STANDARD,
+        'proof_photos':   proof_photos_for(t),
     })
 
 # ── Site config helpers ───────────────────────────────────────────────────────
@@ -1278,7 +1440,7 @@ def load_all_site_configs():
     except: return {}
 
 def save_all_site_configs(configs):
-    with open(SITES_FILE, 'w') as f: json.dump(configs, f, indent=2)
+    save_json(SITES_FILE, configs)
 
 def site_config(site_id):
     return load_all_site_configs().get(site_id, {
@@ -1301,15 +1463,22 @@ def api_get_sites():
         sc  = scfg.get(sid, {})
         logo = sc.get('logo', '')
         result.append({
-            'id':          sid,
-            'name':        t['name'],
-            'has_kitchen': t.get('has_kitchen', False),
-            'site_type':   sc.get('site_type', 'restaurant'),
-            'is_builtin':  sid in _BASE_TEMPLATES,
-            'address':     sc.get('address', ''),
-            'start_time':  sc.get('start_time', ''),
-            'logo_url':    f'/site-logos/{logo}' if logo else '',
-            'pricing':     sc.get('pricing', {}),
+            'id':           sid,
+            'name':         t['name'],
+            'has_kitchen':  t.get('has_kitchen', False),
+            'site_type':    sc.get('site_type', 'restaurant'),
+            'is_builtin':   sid in _BASE_TEMPLATES,
+            'address':      sc.get('address', ''),
+            'start_time':   sc.get('start_time', ''),
+            'logo_url':     f'/site-logos/{logo}' if logo else '',
+            'pricing':      sc.get('pricing', {}),
+            'num_rooms':    sc.get('num_rooms', ''),
+            'num_bathrooms': sc.get('num_bathrooms', ''),
+            'is_adhoc':     bool(sc.get('is_adhoc')),
+            'adhoc_date':   sc.get('adhoc_date', ''),
+            'property_type': sc.get('property_type', ''),
+            'waste_type':   sc.get('waste_type', ''),
+            'skip_bin_size': sc.get('skip_bin_size', ''),
             **cfg,
         })
     return jsonify(result)
@@ -1325,15 +1494,37 @@ def api_create_site():
     base_sid, counter = sid, 2
     while sid in templates:
         sid = f"{base_sid}_{counter}"; counter += 1
-    has_kitchen = bool(data.get('has_kitchen', False))
-    site_type   = data.get('site_type', 'restaurant').strip().lower()
-    if site_type not in ('restaurant', 'office', 'construction'): site_type = 'restaurant'
+    has_kitchen   = bool(data.get('has_kitchen', False))
+    site_type     = data.get('site_type', 'restaurant').strip().lower()
+    if site_type not in ('restaurant', 'office', 'construction', 'residential'): site_type = 'restaurant'
+    num_rooms     = str(data.get('num_rooms', '') or '').strip()
+    property_type = str(data.get('property_type', '') or '').strip()
+    waste_type    = str(data.get('waste_type', '') or '').strip()
+    skip_bin_size = str(data.get('skip_bin_size', '') or '').strip()
+    num_bathrooms = str(data.get('num_bathrooms', '') or '').strip()
+    is_adhoc      = bool(data.get('is_adhoc', False))
+    adhoc_date    = _clean_date(data.get('adhoc_date'))
+    if is_adhoc and not adhoc_date:
+        return jsonify({'error': 'Pick the job date for a once-off (adhoc) site'}), 400
     try:
         with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
     except: scfg = {}
     scfg[sid] = {'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type}
+    if num_rooms:     scfg[sid]['num_rooms']     = num_rooms
+    if property_type: scfg[sid]['property_type'] = property_type
+    if waste_type:    scfg[sid]['waste_type']    = waste_type
+    if skip_bin_size: scfg[sid]['skip_bin_size'] = skip_bin_size
+    if num_bathrooms: scfg[sid]['num_bathrooms'] = num_bathrooms
+    if is_adhoc:
+        scfg[sid]['is_adhoc']   = True
+        scfg[sid]['adhoc_date'] = adhoc_date
     save_json(SITES_CONFIG_FILE, scfg)
-    return jsonify({'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type, 'is_builtin': False}), 201
+    return jsonify({
+        'id': sid, 'name': name, 'has_kitchen': has_kitchen, 'site_type': site_type,
+        'is_adhoc': is_adhoc, 'adhoc_date': adhoc_date if is_adhoc else '',
+        'is_builtin': False, 'num_rooms': num_rooms, 'property_type': property_type,
+        'waste_type': waste_type, 'skip_bin_size': skip_bin_size,
+    }), 201
 
 @app.route('/api/sites/<site_id>/logo', methods=['POST'])
 @login_required
@@ -1366,8 +1557,14 @@ def api_update_site(site_id):
     data = dict(request.get_json() or {})
     # Save name/has_kitchen/start_time/address to sites_config.json if present
     site_meta = {}
-    for key in ('name', 'has_kitchen', 'start_time', 'address', 'site_type', 'pricing'):
+    for key in ('name', 'has_kitchen', 'start_time', 'address', 'site_type', 'pricing', 'num_rooms', 'num_bathrooms', 'property_type', 'waste_type', 'skip_bin_size'):
         if key in data: site_meta[key] = data.pop(key)
+    if 'is_adhoc' in data:
+        site_meta['is_adhoc'] = bool(data.pop('is_adhoc'))
+    if 'adhoc_date' in data:
+        site_meta['adhoc_date'] = _clean_date(data.pop('adhoc_date'))
+    if site_meta.get('is_adhoc') and not site_meta.get('adhoc_date'):
+        return jsonify({'error': 'Pick the job date for a once-off (adhoc) site'}), 400
     if site_meta:
         try:
             with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
@@ -1402,6 +1599,7 @@ def api_delete_site(site_id):
 @employee_or_admin_required
 def api_sites_today():
     day     = _today_day_abbr()
+    today   = sydney_now().strftime('%Y-%m-%d')
     emp_id  = session.get('employee_id')
     all_cfg = load_all_site_configs()          # sites.json  — schedule/enabled data
     try:
@@ -1410,16 +1608,17 @@ def api_sites_today():
     result  = []
     for sid, t in get_templates().items():
         cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
-        if not cfg.get('enabled', True): continue
-        if day not in cfg.get('assigned_days', _DAY_NAMES): continue
+        sc = scfg.get(sid, {})
+        if not _site_runs_on(sc, cfg, day, today): continue
         assigned = cfg.get('assigned_employees', [])
         if assigned and emp_id and emp_id not in assigned: continue
-        sc = scfg.get(sid, {})
         logo = sc.get('logo', '')
         result.append({
             'id':          sid,
             'name':        t['name'],
             'has_kitchen': t.get('has_kitchen', False),
+            'site_type':   sc.get('site_type', 'restaurant'),
+            'is_adhoc':    bool(sc.get('is_adhoc')),
             'address':     sc.get('address', ''),
             'start_time':  sc.get('start_time', ''),
             'logo_url':    f'/site-logos/{logo}' if logo else '',
@@ -1435,18 +1634,19 @@ def api_sites_week():
         with open(SITES_CONFIG_FILE) as f: scfg = json.load(f)
     except: scfg = {}                          # sites_config.json — name/address/start_time
     week    = {}
+    dates   = _this_week_dates()
     for day in _DAY_NAMES:
         sites = []
         for sid, t in get_templates().items():
             cfg = all_cfg.get(sid, {'assigned_days': _DAY_NAMES, 'assigned_employees': [], 'enabled': True})
-            if not cfg.get('enabled', True): continue
-            if day not in cfg.get('assigned_days', _DAY_NAMES): continue
+            sc = scfg.get(sid, {})
+            if not _site_runs_on(sc, cfg, day, dates[day]): continue
             assigned = cfg.get('assigned_employees', [])
             if assigned and emp_id and emp_id not in assigned: continue
-            sc = scfg.get(sid, {})
             logo = sc.get('logo', '')
             sites.append({
                 'id':         sid,
+                'is_adhoc':   bool(sc.get('is_adhoc')),
                 'name':       t['name'],
                 'address':    sc.get('address', ''),
                 'start_time': sc.get('start_time', ''),
@@ -2004,8 +2204,7 @@ def _build_checklist_pdf(cl, hide_employee=False, include_photos=True):
             photo_h = photo_w * 0.65
             col = 0
             x_positions = [M, M + photo_w + 20]
-            has_kitchen = get_templates().get(cl.get('site_id',''), {}).get('has_kitchen', False)
-            proof_defs  = PROOF_PHOTOS_KITCHEN if has_kitchen else PROOF_PHOTOS_STANDARD
+            proof_defs  = proof_photos_for(get_templates().get(cl.get('site_id',''), {}))
             label_map   = {p['key']: p['label'] for p in proof_defs}
 
             for key, fn in proof_photos.items():
@@ -2274,7 +2473,8 @@ def clients_page():
 @app.route('/api/clients', methods=['GET'])
 @login_required
 def api_get_clients():
-    return jsonify(load_json(CLIENTS_FILE))
+    # Never send password hashes to the browser
+    return jsonify([{k: v for k, v in c.items() if k != 'password'} for c in load_json(CLIENTS_FILE)])
 
 @app.route('/api/clients', methods=['POST'])
 @login_required
@@ -2297,7 +2497,7 @@ def api_create_client():
     }
     clients.append(client)
     save_json(CLIENTS_FILE, clients)
-    return jsonify(client), 201
+    return jsonify({k: v for k, v in client.items() if k != 'password'}), 201
 
 @app.route('/api/clients/<cid>', methods=['PUT'])
 @login_required
@@ -2305,9 +2505,16 @@ def api_update_client(cid):
     clients = load_json(CLIENTS_FILE)
     idx     = next((i for i,c in enumerate(clients) if c['id']==cid), None)
     if idx is None: return ('Not found', 404)
-    clients[idx].update(request.get_json())
+    data = dict(request.get_json() or {})
+    data.pop('id', None)                      # id can never be changed
+    if 'username' in data:
+        data['username'] = str(data['username']).strip().lower()
+    new_pw = str(data.pop('password', '') or '').strip()
+    if new_pw:                                # blank = keep existing password
+        clients[idx]['password'] = generate_password_hash(new_pw)
+    clients[idx].update(data)
     save_json(CLIENTS_FILE, clients)
-    return jsonify(clients[idx])
+    return jsonify({k: v for k, v in clients[idx].items() if k != 'password'})
 
 @app.route('/api/clients/<cid>', methods=['DELETE'])
 @login_required
@@ -2334,18 +2541,7 @@ def api_clients_for_invoice():
         for sid in site_ids:
             t  = templates.get(sid, {})
             sc = scfg.get(sid, {})
-            pricing = sc.get('pricing', {})
-            stype   = sc.get('site_type', 'restaurant')
-            has_k   = sc.get('has_kitchen', t.get('has_kitchen', False))
-            if stype == 'restaurant':
-                w_rev = float(pricing.get('dining_weekly') or 0)
-                if has_k: w_rev += float(pricing.get('kitchen_weekly') or 0)
-            elif stype == 'office':
-                w_rev = float(pricing.get('office_weekly') or 0)
-            elif stype == 'construction':
-                w_rev = float(pricing.get('construction_weekly') or 0)
-            else:
-                w_rev = 0.0
+            w_rev, _, _ = site_weekly_figures(sc, t)
             name = sc.get('name', t.get('name', sid))
             client_sites.append({
                 'id':             sid,
@@ -2405,9 +2601,8 @@ def api_live_status():
     for sid, tmpl in templates.items():
         cfg        = site_cfgs.get(sid, {})
         sc         = scfg.get(sid, {})
-        assigned_days = cfg.get('assigned_days', list(templates.keys()))
-        # Only include today's sites
-        if today_abbr not in cfg.get('assigned_days', ['mon','tue','wed','thu','fri','sat','sun']):
+        # Only include today's sites (adhoc sites only on their job date)
+        if not _site_runs_on(sc, cfg, today_abbr, today):
             continue
 
         start_time_str = sc.get('start_time', '')  # "HH:MM"

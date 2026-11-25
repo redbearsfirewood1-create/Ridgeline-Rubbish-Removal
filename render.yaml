@@ -2,6 +2,7 @@ services:
   - type: web
     name: ridgeline-services
     env: python
+    autoDeployTrigger: checksPass   # only deploy after the GitHub test suite passes
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     disk:

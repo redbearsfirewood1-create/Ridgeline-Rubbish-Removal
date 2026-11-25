@@ -7,7 +7,9 @@
 /* ── App chrome ─────────────────────────────────────── */
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a1a;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
-.topbar{background:#111;border-bottom:1px solid #1e3a1e;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.topbar{background:#111;border-bottom:1px solid #1e3a1e;padding:8px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.topbar-logo{display:flex;align-items:center;flex-shrink:0;line-height:0;}
+.topbar-logo img{height:44px;object-fit:contain;}
 .back{color:#3d8b3d;text-decoration:none;font-size:13px;font-weight:600}
 .topbar-title{font-size:15px;font-weight:800;color:#f0f0f0;flex:1}
 .topbar-status{font-size:12px;color:#666;font-style:italic}
@@ -140,6 +142,7 @@ textarea.notes-area:focus{border-color:#3d8b3d;background:#f7fff7}
 
 <!-- ── Top bar ── -->
 <div class="topbar no-print">
+  <a href="/home" class="topbar-logo"><img src="/static/logo.png" alt="Ridgeline" onerror="this.style.display='none'"></a>
   <a href="/invoices" class="back">← Invoices</a>
   <span class="topbar-title" id="topbarTitle">Invoice</span>
   <span class="topbar-status" id="savedFlash"></span>
