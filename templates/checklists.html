@@ -104,6 +104,18 @@ body{font-family:Arial,sans-serif;background:#0d0d0d;min-height:100dvh;color:#f0
 @keyframes rl-bounce  { 0%,80%,100%{transform:scale(.7);opacity:.3} 40%{transform:scale(1.25);opacity:1} }
 @keyframes rl-fade-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 @keyframes rl-scan    { 0%{left:-40%} 100%{left:110%} }
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+.ph-tile{background:#111;border:1px solid #2a2a2a;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;}
+.ph-tile.missing{border:1px dashed #6b2a2a;}
+.ph-img{width:100%;height:100px;object-fit:cover;border-radius:6px;display:block;background:#000;}
+.ph-empty{height:100px;border-radius:6px;background:#1a1010;color:#ef5350;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.6;}
+.ph-label{font-size:12px;font-weight:700;color:#ddd;}
+.ph-by{font-size:10px;color:#ffb74d;}
+.ph-actions{display:flex;gap:6px;}
+.ph-btn{flex:1;text-align:center;cursor:pointer;background:#1a1a1a;border:1px solid #333;color:#ccc;font-size:11px;font-weight:700;padding:6px 8px;border-radius:7px;}
+.ph-btn:hover{background:#222;color:#fff;}
+.ph-add{background:#1f2e1f;border-color:#3d8b3d;color:#7bd17b;}
+.ph-del{flex:0 0 auto;border-color:#3a1a1a;color:#ef5350;}
 .rl-ring-sm{width:22px;height:22px;border:2px solid #1e1e1e;border-top-color:#3d8b3d;border-radius:50%;animation:rl-spin .75s linear infinite;flex-shrink:0;}
 .rl-loading{display:flex;align-items:center;justify-content:center;gap:12px;color:#555;font-size:13px;padding:36px 16px;}
 /* ───────────────────────────────────────────────────────── */
@@ -351,8 +363,90 @@ function viewDetail(id) {
     </div>
   </div>`;
 
+  if (!IS_CLIENT) html += `<div id="photoAdmin" data-cid="${cl.id}"></div>`;
+
   document.getElementById('detailBody').innerHTML = html;
   document.getElementById('detailModal').classList.add('open');
+  if (!IS_CLIENT) loadPhotoAdmin(cl.id);
+}
+
+// ── Admin: proof photos (view, add missing, replace, remove) ────────────────
+async function loadPhotoAdmin(cid) {
+  const box = document.getElementById('photoAdmin');
+  if (!box) return;
+  box.innerHTML = '<div class="rl-loading"><div class="rl-ring-sm"></div>Loading photos…</div>';
+  let data;
+  try {
+    const r = await fetch(`/api/checklist/${cid}/photos`);
+    if (!r.ok) throw new Error();
+    data = await r.json();
+  } catch(e) {
+    box.innerHTML = '<div style="color:#ef5350;font-size:13px;margin-top:16px;">Could not load photos</div>';
+    return;
+  }
+  const missing = data.missing;
+  const head = missing
+    ? `<span style="background:#3a1a1a;color:#ef5350;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">${missing} missing</span>`
+    : `<span style="background:#1a3a1a;color:#4caf50;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">All photos in</span>`;
+  const tiles = data.slots.map(p => {
+    const safeKey = p.key.replace(/[^a-z0-9_]/g, '');
+    const byLine = p.url && p.added_by
+      ? `<div class="ph-by">${p.added_by === 'Office' ? '🏢 Added by office' : '👤 ' + p.added_by}</div>` : '';
+    const body = p.url
+      ? `<a href="${p.url}" target="_blank"><img src="${p.url}?t=${Date.now()}" class="ph-img" alt="${p.label}"></a>`
+      : `<div class="ph-empty">📷<br>Missing</div>`;
+    const actions = p.url
+      ? `<label class="ph-btn">↻ Replace<input type="file" accept="image/*" hidden onchange="adminUploadPhoto('${cid}','${safeKey}',this)"></label>
+         <button class="ph-btn ph-del" onclick="adminDeletePhoto('${cid}','${safeKey}')">✕</button>`
+      : `<label class="ph-btn ph-add">＋ Upload<input type="file" accept="image/*" hidden onchange="adminUploadPhoto('${cid}','${safeKey}',this)"></label>`;
+    return `<div class="ph-tile ${p.url ? '' : 'missing'}">
+      ${body}
+      <div class="ph-label">${p.label}</div>${byLine}
+      <div class="ph-actions">${actions}</div>
+    </div>`;
+  }).join('');
+  const arrival = data.arrival_photo
+    ? `<div style="font-size:12px;color:#888;margin:4px 0 10px;">📍 Arrival photo: <a href="${data.arrival_photo}" target="_blank" style="color:#4caf50;">view</a></div>` : '';
+  box.innerHTML = `
+    <div style="margin-top:16px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;">
+      <div style="background:#1f2e1f;padding:10px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:.5px;display:flex;align-items:center;">📷 PROOF PHOTOS ${head}</div>
+      <div style="padding:14px;">
+        ${arrival}
+        <div class="ph-grid">${tiles || '<div style="color:#666;font-size:13px;">No photo slots for this site.</div>'}</div>
+        <label class="ph-btn ph-add" style="margin-top:12px;display:inline-block;">＋ Add extra photo
+          <input type="file" accept="image/*" hidden onchange="adminUploadPhoto('${cid}','new_extra',this)">
+        </label>
+        <div id="phStatus" style="font-size:12px;color:#888;margin-top:8px;"></div>
+      </div>
+    </div>`;
+}
+
+async function adminUploadPhoto(cid, key, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const status = document.getElementById('phStatus');
+  if (status) { status.style.color = '#888'; status.textContent = 'Uploading…'; }
+  const fd = new FormData();
+  fd.append('photo', file, file.name || 'photo.jpg');
+  try {
+    const r = await fetch(`/api/checklist/${cid}/admin-photo/${key}`, {method: 'POST', body: fd});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Upload failed');
+    await loadPhotoAdmin(cid);
+    const s2 = document.getElementById('phStatus');
+    if (s2) { s2.style.color = '#4caf50'; s2.textContent = '✅ Photo saved — it will appear in the PDF report'; }
+  } catch(e) {
+    if (status) { status.style.color = '#ef5350'; status.textContent = '❌ ' + e.message; }
+  }
+}
+
+async function adminDeletePhoto(cid, key) {
+  if (!confirm('Remove this photo from the checklist? This cannot be undone.')) return;
+  try {
+    const r = await fetch(`/api/checklist/${cid}/photo/${key}`, {method: 'DELETE'});
+    if (!r.ok) throw new Error();
+    loadPhotoAdmin(cid);
+  } catch(e) { alert('Could not remove photo'); }
 }
 
 function closeModal(e) {

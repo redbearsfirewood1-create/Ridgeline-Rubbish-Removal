@@ -1890,26 +1890,104 @@ def api_employee_today(eid):
     })
 
 # ── Proof photo upload ────────────────────────────────────────────────────────
+_PHOTO_KEY_RE = re.compile(r'^[a-z0-9_]{1,40}$')
+
+def _proof_dir():
+    d = os.path.join(PHOTOS_DIR, 'proofs')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+def _save_proof_photo(cid, photo_key, uploaded_by):
+    """Shared by the cleaner upload and the admin upload. Returns (json, status)."""
+    if not _PHOTO_KEY_RE.match(photo_key or ''):
+        return {'error': 'Invalid photo slot'}, 400
+    if 'photo' not in request.files:
+        return {'error': 'No file'}, 400
+    f = request.files['photo']
+    if not f.filename or not allowed_file(f.filename):
+        return {'error': 'Only image files (jpg, png, heic…) can be uploaded'}, 400
+    checklists = load_json(CHECKLISTS_FILE)
+    idx = next((i for i, x in enumerate(checklists) if x['id'] == cid), None)
+    if idx is None:
+        return {'error': 'Checklist not found'}, 404
+    ext = f.filename.rsplit('.', 1)[1].lower()
+    fn  = f'{cid}_{photo_key}.{ext}'
+    d   = _proof_dir()
+    cl  = checklists[idx]
+    old = (cl.get('proof_photos') or {}).get(photo_key)
+    f.save(os.path.join(d, fn))
+    if old and old != fn:                       # replaced with a different file type — tidy up
+        try: os.remove(os.path.join(d, old))
+        except OSError: pass
+    cl.setdefault('proof_photos', {})[photo_key] = fn
+    cl.setdefault('proof_photo_meta', {})[photo_key] = {'by': uploaded_by, 'at': sydney_now().isoformat()}
+    save_json(CHECKLISTS_FILE, checklists)
+    return {'photo': fn, 'url': f'/proof-photos/{fn}', 'key': photo_key}, 200
+
 @app.route('/api/checklist/<cid>/proof/<photo_key>', methods=['POST'])
 def api_upload_proof(cid, photo_key):
     if not session.get('employee_id') and not session.get('logged_in'):
         return jsonify({'error': 'Not authenticated'}), 401
     ensure_dirs()
-    if 'photo' not in request.files: return jsonify({'error':'No file'}), 400
-    f = request.files['photo']
-    if not allowed_file(f.filename): return jsonify({'error':'Invalid type'}), 400
-    ext = f.filename.rsplit('.',1)[1].lower() if '.' in f.filename else 'jpg'
-    proof_dir = os.path.join(PHOTOS_DIR, 'proofs')
-    os.makedirs(proof_dir, exist_ok=True)
-    fn = f'{cid}_{photo_key}.{ext}'
-    f.save(os.path.join(proof_dir, fn))
+    by = session.get('employee_name') or 'Office'
+    body, status = _save_proof_photo(cid, photo_key, by)
+    return jsonify(body), status
+
+# ── Admin: view / add / replace / remove photos on a completed checklist ──────
+@app.route('/api/checklist/<cid>/photos', methods=['GET'])
+@login_required
+def api_checklist_photos(cid):
+    cl = next((c for c in load_json(CHECKLISTS_FILE) if c['id'] == cid), None)
+    if not cl: return jsonify({'error': 'Checklist not found'}), 404
+    have = cl.get('proof_photos') or {}
+    meta = cl.get('proof_photo_meta') or {}
+    t    = get_templates().get(cl.get('site_id', ''), {})
+    slots = [dict(p) for p in proof_photos_for(t)] if t else []
+    known = {p['key'] for p in slots}
+    for key in have:                            # extra photos / slots from an older layout
+        if key not in known:
+            slots.append({'key': key, 'label': key.replace('_', ' ').title(), 'extra': True})
+    for p in slots:
+        fn = have.get(p['key'])
+        p['url'] = f'/proof-photos/{fn}' if fn else ''
+        m = meta.get(p['key']) or {}
+        p['added_by'] = m.get('by', '')
+        p['added_at'] = m.get('at', '')
+    arrival_url = ''
+    if cl.get('arrival_id'):
+        arr = next((a for a in load_json(ARRIVALS_FILE) if a.get('id') == cl['arrival_id']), None)
+        if arr and arr.get('photo'):
+            arrival_url = f"/arrival-photos/{arr['photo']}"
+    return jsonify({'slots': slots, 'arrival_photo': arrival_url,
+                    'missing': sum(1 for p in slots if not p['url'] and not p.get('extra'))})
+
+@app.route('/api/checklist/<cid>/admin-photo/<photo_key>', methods=['POST'])
+@login_required
+def api_admin_upload_photo(cid, photo_key):
+    ensure_dirs()
+    if photo_key == 'new_extra':                # "Add extra photo" — pick the next free extra_N slot
+        cl = next((c for c in load_json(CHECKLISTS_FILE) if c['id'] == cid), None)
+        if not cl: return jsonify({'error': 'Checklist not found'}), 404
+        have = cl.get('proof_photos') or {}
+        n = 1
+        while f'extra_{n}' in have: n += 1
+        photo_key = f'extra_{n}'
+    body, status = _save_proof_photo(cid, photo_key, 'Office')
+    return jsonify(body), status
+
+@app.route('/api/checklist/<cid>/photo/<photo_key>', methods=['DELETE'])
+@login_required
+def api_admin_delete_photo(cid, photo_key):
     checklists = load_json(CHECKLISTS_FILE)
-    idx = next((i for i,x in enumerate(checklists) if x['id']==cid), None)
-    if idx is not None:
-        if 'proof_photos' not in checklists[idx]: checklists[idx]['proof_photos'] = {}
-        checklists[idx]['proof_photos'][photo_key] = fn
-        save_json(CHECKLISTS_FILE, checklists)
-    return jsonify({'photo': fn})
+    cl = next((c for c in checklists if c['id'] == cid), None)
+    if not cl: return jsonify({'error': 'Checklist not found'}), 404
+    fn = (cl.get('proof_photos') or {}).pop(photo_key, None)
+    if not fn: return jsonify({'error': 'Photo not found'}), 404
+    (cl.get('proof_photo_meta') or {}).pop(photo_key, None)
+    save_json(CHECKLISTS_FILE, checklists)
+    try: os.remove(os.path.join(_proof_dir(), fn))
+    except OSError: pass
+    return jsonify({'ok': True})
 
 @app.route('/proof-photos/<filename>')
 @login_required
